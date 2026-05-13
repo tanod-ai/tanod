@@ -27,6 +27,7 @@ Tanod is in early v0.1 development. The current repository contains the first ex
 - Native Go `tanod` CLI for decisions, approvals, execution, and audit verification
 - Dockerfile and Docker Compose deployment with Postgres
 - Standalone React/Vite web console in `apps/console`
+- OpenClaw plugin in `integrations/openclaw-plugin` with gate-only and governed replacement modes
 - API-key authentication for network exposure via `TANOD_API_KEYS`
 - Example policies and tool-call requests
 - Node test suite for policy, signing, guarded execution, adapters, and audit behavior
@@ -439,6 +440,64 @@ The console lists approval requests, displays exact tool arguments and argument 
 
 A plain `tanod decide` call does not create a persistent approval request. To make an item appear in the console, create one with `tanod request-approval <request.json> --by <user>` or `POST /v1/approval-requests`.
 
+## OpenClaw plugin
+
+The OpenClaw plugin lives in `integrations/openclaw-plugin` and injects Tanod at OpenClaw's tool boundary, after the LLM has produced a structured tool call and before OpenClaw executes it.
+
+It supports two configurable modes:
+
+1. `gate_only` — a high-priority `before_tool_call` hook evaluates existing OpenClaw tools with Tanod. Denied calls are blocked. Approval-required calls use OpenClaw's plugin approval pause and can create a Tanod approval request for console/CLI review.
+2. `governed_replacement` — the plugin registers Tanod-backed tools (`tanod_exec`, `tanod_http_request`, `tanod_mcp_call_tool`) and, by default, blocks configured raw dangerous OpenClaw tools so agents must use Tanod's `/v1/executions` path.
+
+Example gate-only config:
+
+```json5
+{
+  "plugins": {
+    "entries": {
+      "tanod": {
+        "enabled": true,
+        "config": {
+          "mode": "gate_only",
+          "tanodUrl": "http://127.0.0.1:8787",
+          "apiKeyEnv": "TANOD_API_KEY",
+          "actorId": "ross@example.com",
+          "agentId": "openclaw-main"
+        }
+      }
+    }
+  }
+}
+```
+
+Example governed replacement config:
+
+```json5
+{
+  "plugins": {
+    "entries": {
+      "tanod": {
+        "enabled": true,
+        "config": {
+          "mode": "governed_replacement",
+          "tanodUrl": "http://127.0.0.1:8787",
+          "apiKeyEnv": "TANOD_API_KEY",
+          "actorId": "ross@example.com",
+          "agentId": "openclaw-main",
+          "blockRawProtectedToolsInGovernedMode": true
+        }
+      }
+    }
+  },
+  "tools": {
+    "allow": ["tanod", "tanod_exec", "tanod_http_request", "tanod_mcp_call_tool"],
+    "deny": ["exec", "bash", "code_execution", "apply_patch", "write", "edit"]
+  }
+}
+```
+
+Gate-only mode is best for rollout and observation. Governed replacement mode is stronger because Tanod owns policy, approval verification, execution, and audit. See `integrations/openclaw-plugin/README.md` for full config details.
+
 ## Storage
 
 Tanod supports Postgres-backed durable storage. Set `TANOD_DATABASE_URL` to enable it:
@@ -500,6 +559,7 @@ x-tanod-api-key: key-one
 │   └── requests/         # sample agent tool calls
 ├── apps/console/       # standalone React/Vite web console
 ├── cli/                # native Go CLI
+├── integrations/openclaw-plugin/ # OpenClaw Tanod plugin
 ├── db/schema.sql
 ├── deployments/docker-compose/docker-compose.yml
 ├── Dockerfile
@@ -520,6 +580,7 @@ Build and test:
 
 ```bash
 npm test
+npm test --prefix integrations/openclaw-plugin
 ```
 
 Run the gateway:

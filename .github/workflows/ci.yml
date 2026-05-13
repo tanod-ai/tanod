@@ -24,6 +24,7 @@ jobs:
           cache-dependency-path: cli/go.mod
       - run: npm ci
       - run: npm test
+      - run: npm test --prefix integrations/openclaw-plugin
       - run: go test ./...
         working-directory: cli
       - run: go build -o ../bin/tanod ./cmd/tanod

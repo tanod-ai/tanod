@@ -1,0 +1,95 @@
+{
+  "id": "tanod",
+  "name": "Tanod",
+  "description": "Injects Tanod signed execution control into OpenClaw tool calls.",
+  "contracts": {
+    "tools": ["tanod_exec", "tanod_http_request", "tanod_mcp_call_tool"]
+  },
+  "toolMetadata": {
+    "tanod_exec": { "optional": true },
+    "tanod_http_request": { "optional": true },
+    "tanod_mcp_call_tool": { "optional": true }
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "mode": {
+        "type": "string",
+        "enum": ["gate_only", "governed_replacement"],
+        "default": "gate_only",
+        "description": "gate_only intercepts existing OpenClaw tools before execution. governed_replacement registers Tanod-backed tools and can block configured raw tools."
+      },
+      "tanodUrl": {
+        "type": "string",
+        "default": "http://127.0.0.1:8787",
+        "description": "Base URL for the Tanod gateway."
+      },
+      "apiKey": {
+        "type": "string",
+        "description": "Tanod API key. Prefer apiKeyEnv for production."
+      },
+      "apiKeyEnv": {
+        "type": "string",
+        "default": "TANOD_API_KEY",
+        "description": "Environment variable containing the Tanod API key."
+      },
+      "agentId": {
+        "type": "string",
+        "default": "openclaw"
+      },
+      "agentType": {
+        "type": "string",
+        "default": "openclaw-agent"
+      },
+      "actorId": {
+        "type": "string",
+        "default": "openclaw-user"
+      },
+      "defaultEnvironment": {
+        "type": "string",
+        "default": "dev"
+      },
+      "protectedTools": {
+        "type": "array",
+        "items": { "type": "string" },
+        "default": ["exec", "bash", "code_execution", "apply_patch", "write", "edit", "web_fetch", "mcp.call_tool"]
+      },
+      "blockRawProtectedToolsInGovernedMode": {
+        "type": "boolean",
+        "default": true
+      },
+      "createApprovalRequests": {
+        "type": "boolean",
+        "default": true
+      },
+      "approvalRequestedBy": {
+        "type": "string",
+        "default": "openclaw"
+      },
+      "approvalTimeoutMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "maximum": 600000,
+        "default": 600000
+      },
+      "approvalTimeoutBehavior": {
+        "type": "string",
+        "enum": ["allow", "deny"],
+        "default": "deny"
+      },
+      "approvalRole": {
+        "type": "string",
+        "description": "Optional Tanod approval role used only by future custom approval flows."
+      },
+      "failClosed": {
+        "type": "boolean",
+        "default": true,
+        "description": "When Tanod is unavailable, block protected tools instead of allowing them."
+      }
+    }
+  }
+}

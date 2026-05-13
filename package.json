@@ -10,8 +10,10 @@
     "start": "npm run server",
     "dev": "node --loader ts-node/esm src/index.ts",
     "test": "npm run build && node --test dist/tests/*.test.js",
-    "check": "npm run build && npm test",
-    "server": "node dist/src/index.js server"
+    "check": "npm run build && npm test && npm run test:openclaw-plugin",
+    "server": "node dist/src/index.js server",
+    "build:openclaw-plugin": "npm run build --prefix integrations/openclaw-plugin",
+    "test:openclaw-plugin": "npm test --prefix integrations/openclaw-plugin"
   },
   "engines": {
     "node": ">=22"
