@@ -67,6 +67,11 @@ export type MatchCondition =
   | { matches: string }
   | { in: unknown[] };
 
+export interface ApprovalRequirements {
+  required_roles: string[];
+  token_ttl_seconds?: number;
+}
+
 export interface DecisionResponse {
   request_id: string;
   decision: Decision;
@@ -74,6 +79,7 @@ export interface DecisionResponse {
   policy_ids: string[];
   argument_hash: string;
   message: string;
+  approval?: ApprovalRequirements;
 }
 
 export interface ApprovalTokenClaims {

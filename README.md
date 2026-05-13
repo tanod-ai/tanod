@@ -414,7 +414,7 @@ The web console is a standalone React/Vite application in `apps/console`. It is 
 Run the gateway in one terminal:
 
 ```bash
-TANOD_API_KEYS=dev-key npm run dev
+TANOD_API_KEYS=dev-key TANOD_API_KEY_ROLES=dev-key:platform_owner TANOD_API_KEY_IDENTITIES=dev-key:ross@example.com npm run dev
 ```
 
 Run the console in another terminal:
@@ -433,7 +433,7 @@ http://127.0.0.1:5173
 
 The Vite dev server proxies `/v1` and `/healthz` to `http://127.0.0.1:8787`. For a remote gateway, set the API base in the console UI or build/run with `VITE_TANOD_API_BASE=http://<gateway-host>:8787`. The gateway responds to browser CORS preflight requests so the standalone console can call the API from a separate origin.
 
-The console lists approval requests, displays exact tool arguments and argument hashes, and can approve or reject pending requests. Use the status filter to switch between pending, all, approved, rejected, and expired requests. If `TANOD_API_KEYS` is configured, enter the matching API key in the console.
+The console lists approval requests, displays exact tool arguments and argument hashes, and can approve or reject pending requests. Use the status filter to switch between pending, all, approved, rejected, and expired requests. If `TANOD_API_KEYS` is configured, enter the matching API key in the console. Approval APIs enforce policy-required roles; configure key roles with `TANOD_API_KEY_ROLES`, for example `dev-key:platform_owner` or `ops-key:platform_owner,security_owner;sec-key:security_owner`. You can also bind API keys to approver identities with `TANOD_API_KEY_IDENTITIES`, for example `dev-key:ross@example.com`.
 
 A plain `tanod decide` call does not create a persistent approval request. To make an item appear in the console, create one with `tanod request-approval <request.json> --by <user>` or `POST /v1/approval-requests`.
 
@@ -460,7 +460,10 @@ If `TANOD_DATABASE_URL` is absent, Tanod uses in-memory storage for local develo
 Set comma-separated API keys to require authentication for all non-health endpoints. This is strongly recommended whenever Tanod binds to a LAN-accessible address:
 
 ```bash
-TANOD_API_KEYS=key-one,key-two npm start
+TANOD_API_KEYS=key-one,key-two \
+TANOD_API_KEY_ROLES='key-one:platform_owner;key-two:security_owner' \
+TANOD_API_KEY_IDENTITIES='key-one:ops@example.com;key-two:sec@example.com' \
+npm start
 ```
 
 Clients can authenticate with either:
@@ -533,6 +536,9 @@ Defaults:
 - Audit file: `.tanod/audit.jsonl`
 - Postgres URL: optional `TANOD_DATABASE_URL`
 - API keys: optional `TANOD_API_KEYS`
+- API key roles: optional `TANOD_API_KEY_ROLES` as `key:role,role;other-key:role`
+- API key identities: optional `TANOD_API_KEY_IDENTITIES` as `key:user@example.com;other-key:user2@example.com`
+- Request bodies: limited to 1 MiB
 - Shell execution: disabled unless `TANOD_ENABLE_SHELL_EXECUTION=true`
 - Shell timeout: `10000` ms
 - HTTP timeout: `10000` ms
@@ -588,7 +594,7 @@ TANOD_HOST=127.0.0.1 npm run dev
 For LAN testing or anything beyond localhost, use an API key:
 
 ```bash
-TANOD_API_KEYS=dev-key npm run dev
+TANOD_API_KEYS=dev-key TANOD_API_KEY_ROLES=dev-key:platform_owner TANOD_API_KEY_IDENTITIES=dev-key:ross@example.com npm run dev
 ```
 
 In another terminal, point the CLI at the running gateway:

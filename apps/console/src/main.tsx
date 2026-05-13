@@ -38,6 +38,7 @@ function App() {
   const [apiBase, setApiBase] = useLocalStorage('tanod.console.apiBase', defaultApiBase);
   const [apiKey, setApiKey] = useLocalStorage('tanod.console.apiKey', '');
   const [approver, setApprover] = useLocalStorage('tanod.console.approver', 'operator@example.com');
+  const [approverRole, setApproverRole] = useLocalStorage('tanod.console.approverRole', 'platform_owner');
   const [status, setStatus] = useState<StatusFilter>('pending');
   const [records, setRecords] = useState<ApprovalRequest[]>([]);
   const [loading, setLoading] = useState(false);
@@ -81,7 +82,7 @@ function App() {
     try {
       await api(`/v1/approval-requests/${encodeURIComponent(record.approval_id)}/approve`, {
         method: 'POST',
-        body: JSON.stringify({ approved_by: approver, approved_role: 'operator' }),
+        body: JSON.stringify({ approved_by: approver, approved_role: approverRole }),
       });
       await loadApprovals();
     } catch (err) {
@@ -128,6 +129,7 @@ function App() {
           <label>API base<input value={apiBase} onChange={(e) => setApiBase(e.target.value)} placeholder="same origin or http://host:8787" /></label>
           <label>API key<input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="required if TANOD_API_KEYS is set" /></label>
           <label>Approver<input value={approver} onChange={(e) => setApprover(e.target.value)} /></label>
+          <label>Role<input value={approverRole} onChange={(e) => setApproverRole(e.target.value)} placeholder="platform_owner" /></label>
           <label>Status<select value={status} onChange={(e) => { const next = e.target.value as StatusFilter; setStatus(next); void loadApprovals(next); }}><option value="pending">Pending</option><option value="all">All</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="expired">Expired</option></select></label>
         </section>
 

@@ -64,3 +64,45 @@ test('signed approval token rejects expiry', async () => {
   );
   assert.throws(() => verifyApprovalToken(token, keys.publicKeyPem, toolCall, claims.exp + 1), /expired/);
 });
+
+
+test('approval token verification enforces policy and required role', async () => {
+  const keys = generateSigningKeyPair();
+  const toolCall = await request('examples/requests/shell-write-prod.json');
+  const { token } = signApproval(
+    {
+      request: toolCall,
+      approved_by: 'ross@example.com',
+      approved_role: 'viewer',
+      policy_id: 'approve-prod-shell-write',
+      risk_level: 'L3',
+      ttl_seconds: 900,
+    },
+    keys.privateKeyPem,
+  );
+
+  assert.throws(
+    () => verifyApprovalToken(token, keys.publicKeyPem, toolCall, undefined, { policy_id: 'approve-prod-shell-write', required_roles: ['platform_owner'] }),
+    /approved_role is not authorized/,
+  );
+});
+
+test('approval token TTL is bounded', async () => {
+  const keys = generateSigningKeyPair();
+  const toolCall = await request('examples/requests/shell-write-prod.json');
+  assert.throws(
+    () =>
+      signApproval(
+        {
+          request: toolCall,
+          approved_by: 'ross@example.com',
+          approved_role: 'platform_owner',
+          policy_id: 'approve-prod-shell-write',
+          risk_level: 'L3',
+          ttl_seconds: 3601,
+        },
+        keys.privateKeyPem,
+      ),
+    /ttl_seconds must be <= 3600/,
+  );
+});

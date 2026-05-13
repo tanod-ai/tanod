@@ -52,10 +52,6 @@ class ShellExecAdapter implements ToolAdapter {
     }
 
     try {
-      // We intentionally do not invoke a shell. The command string is passed as
-      // one argument to /bin/sh -lc only after explicit operator opt-in via env.
-      // This preserves expected shell semantics while keeping execution disabled
-      // by default for safe development and demos.
       const result = await execFileAsync('/bin/sh', ['-lc', command], {
         timeout: this.config.shellTimeoutMs,
         maxBuffer: 1024 * 1024,
@@ -87,13 +83,14 @@ class HttpRequestAdapter implements ToolAdapter {
     const method = String(request.arguments.method ?? 'GET').toUpperCase();
     const body = request.arguments.body;
     const headers = normalizeHeaders(request.arguments.headers);
+    if (!headers.ok) return { status: 'failure', adapter: this.name, error: headers.error };
 
     if (typeof url !== 'string') return { status: 'failure', adapter: this.name, error: 'http.request requires arguments.url string.' };
     if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'].includes(method)) {
       return { status: 'failure', adapter: this.name, error: `Unsupported HTTP method: ${method}` };
     }
 
-    return executeHttp(this.name, url, method, headers, body, this.config.httpTimeoutMs);
+    return executeHttp(this.name, url, method, headers.value, body, this.config.httpTimeoutMs);
   }
 }
 
@@ -107,6 +104,7 @@ class McpCallToolAdapter implements ToolAdapter {
     const toolName = request.arguments.tool_name;
     const toolArguments = request.arguments.tool_arguments ?? {};
     const headers = normalizeHeaders(request.arguments.headers);
+    if (!headers.ok) return { status: 'failure', adapter: this.name, error: headers.error };
 
     if (typeof serverUrl !== 'string') return { status: 'failure', adapter: this.name, error: 'mcp.call_tool requires arguments.server_url string.' };
     if (typeof toolName !== 'string' || toolName.trim().length === 0) {
@@ -133,7 +131,7 @@ class McpCallToolAdapter implements ToolAdapter {
       {
         accept: 'application/json, text/event-stream',
         'content-type': 'application/json',
-        ...(headers ?? {}),
+        ...(headers.value ?? {}),
       },
       rpcRequest,
       this.config.httpTimeoutMs,
@@ -167,7 +165,12 @@ async function executeHttp(
   body: unknown,
   timeoutMs: number,
 ): Promise<ExecutionResult> {
-  const parsedUrl = new URL(url);
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch (error) {
+    return { status: 'failure', adapter, error: error instanceof Error ? error.message : 'Invalid URL.' };
+  }
   if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
     return { status: 'failure', adapter, error: `Unsupported URL protocol: ${parsedUrl.protocol}` };
   }
@@ -226,10 +229,10 @@ function parseJsonObject(value: string): { ok: true; value: Record<string, unkno
   }
 }
 
-function normalizeHeaders(value: unknown): Record<string, string> | undefined {
-  if (value === undefined) return undefined;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('arguments.headers must be an object.');
+function normalizeHeaders(value: unknown): { ok: true; value: Record<string, string> | undefined } | { ok: false; error: string } {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, error: 'arguments.headers must be an object.' };
   const headers: Record<string, string> = {};
   for (const [key, headerValue] of Object.entries(value as Record<string, unknown>)) headers[key] = String(headerValue);
-  return headers;
+  return { ok: true, value: headers };
 }

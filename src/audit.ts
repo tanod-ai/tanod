@@ -8,6 +8,8 @@ import type { Storage } from './storage.js';
 export class AuditLog {
   private previousHash: string | null = null;
   private initialized = false;
+  private initializePromise?: Promise<void>;
+  private appendQueue: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly filePath: string,
@@ -15,6 +17,12 @@ export class AuditLog {
   ) {}
 
   async append(event: Omit<AuditEvent, 'event_id' | 'timestamp' | 'previous_hash' | 'event_hash'>): Promise<AuditEvent> {
+    const operation = this.appendQueue.then(() => this.appendNow(event));
+    this.appendQueue = operation.catch(() => undefined);
+    return operation;
+  }
+
+  private async appendNow(event: Omit<AuditEvent, 'event_id' | 'timestamp' | 'previous_hash' | 'event_hash'>): Promise<AuditEvent> {
     await this.initialize();
     const unsigned: AuditEvent = {
       event_id: `evt_${randomUUID()}`,
@@ -33,15 +41,23 @@ export class AuditLog {
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
-    this.initialized = true;
+    this.initializePromise ??= this.initializeNow();
+    await this.initializePromise;
+  }
+
+  private async initializeNow(): Promise<void> {
+    if (this.initialized) return;
     try {
       const raw = await readFile(this.filePath, 'utf8');
       const lines = raw.split('\n').filter(Boolean);
-      if (lines.length === 0) return;
-      const last = JSON.parse(lines[lines.length - 1]) as AuditEvent;
-      this.previousHash = last.event_hash ?? null;
+      if (lines.length > 0) {
+        const last = JSON.parse(lines[lines.length - 1]) as AuditEvent;
+        this.previousHash = last.event_hash ?? null;
+      }
+      this.initialized = true;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      this.initialized = true;
     }
   }
 }

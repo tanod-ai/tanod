@@ -32,6 +32,12 @@ export function evaluatePolicy(policyFile: PolicyFile, request: ToolCallRequest)
     policy_ids: [matched.id],
     argument_hash: argumentHash,
     message: matched.then.message ?? `Policy ${matched.id} returned ${matched.then.decision}.`,
+    approval: matched.then.approval
+      ? {
+          required_roles: matched.then.approval.required_roles ?? [],
+          token_ttl_seconds: matched.then.approval.token_ttl_seconds,
+        }
+      : undefined,
   };
 }
 

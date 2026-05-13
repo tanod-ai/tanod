@@ -32,3 +32,21 @@ test('audit chain verification detects tampering', async () => {
   events[0].decision = 'deny';
   assert.equal(verifyAuditChain(events), false);
 });
+
+
+test('audit log serializes concurrent appends into a valid chain', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'tanod-audit-concurrent-'));
+  const path = join(dir, 'audit.jsonl');
+  const audit = new AuditLog(path);
+  await Promise.all(
+    Array.from({ length: 25 }, (_, index) =>
+      audit.append({ event_type: 'decision.evaluated', request_id: `req_${index}`, decision: 'allow', risk_level: 'L1' }),
+    ),
+  );
+  const events = (await readFile(path, 'utf8'))
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line) as AuditEvent);
+  assert.equal(events.length, 25);
+  assert.equal(verifyAuditChain(events), true);
+});

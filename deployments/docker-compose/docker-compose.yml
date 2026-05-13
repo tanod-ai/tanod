@@ -27,6 +27,8 @@ services:
       TANOD_PRIVATE_KEY_FILE: /data/ed25519-private.pem
       TANOD_PUBLIC_KEY_FILE: /data/ed25519-public.pem
       TANOD_API_KEYS: dev-local-key-change-me
+      TANOD_API_KEY_ROLES: dev-local-key-change-me:platform_owner,system_owner,security_owner
+      TANOD_API_KEY_IDENTITIES: dev-local-key-change-me:operator@example.com
     ports:
       - "8787:8787"
     volumes:

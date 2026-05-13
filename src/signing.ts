@@ -8,6 +8,9 @@ export interface KeyPairPem {
   publicKeyPem: string;
 }
 
+export const DEFAULT_APPROVAL_TTL_SECONDS = 900;
+export const MAX_APPROVAL_TTL_SECONDS = 3600;
+
 export interface ApprovalInput {
   request: ToolCallRequest;
   approved_by: string;
@@ -16,6 +19,11 @@ export interface ApprovalInput {
   risk_level: RiskLevel;
   ttl_seconds?: number;
   approval_id?: string;
+}
+
+export interface ApprovalVerificationRequirements {
+  policy_id?: string;
+  required_roles?: string[];
 }
 
 export function generateSigningKeyPair(): KeyPairPem {
@@ -28,7 +36,7 @@ export function generateSigningKeyPair(): KeyPairPem {
 
 export function signApproval(input: ApprovalInput, privateKeyPem: string): { token: string; claims: ApprovalTokenClaims } {
   const now = Math.floor(Date.now() / 1000);
-  const ttl = input.ttl_seconds ?? 900;
+  const ttl = normalizeApprovalTtl(input.ttl_seconds);
   const claims: ApprovalTokenClaims = {
     iss: 'tanod',
     sub: 'approval',
@@ -57,6 +65,7 @@ export function verifyApprovalToken(
   publicKeyPem: string,
   request?: ToolCallRequest,
   nowSeconds = Math.floor(Date.now() / 1000),
+  requirements: ApprovalVerificationRequirements = {},
 ): ApprovalTokenClaims {
   const parts = token.split('.');
   if (parts.length !== 3) throw new Error('Approval token must have three compact JWS parts.');
@@ -81,7 +90,21 @@ export function verifyApprovalToken(
     if (claims.tool_name !== request.tool.name) throw new Error('Approval token tool does not match request.');
     if (claims.tool_args_hash !== actualHash) throw new Error('Approval token argument hash does not match request.');
   }
+  if (requirements.policy_id && claims.policy_id !== requirements.policy_id) {
+    throw new Error('Approval token policy does not match required policy.');
+  }
+  const requiredRoles = requirements.required_roles ?? [];
+  if (requiredRoles.length > 0 && (!claims.approved_role || !requiredRoles.includes(claims.approved_role))) {
+    throw new Error('Approval token approved_role is not authorized for this policy.');
+  }
   return claims;
+}
+
+export function normalizeApprovalTtl(ttlSeconds: number | undefined, maxSeconds = MAX_APPROVAL_TTL_SECONDS): number {
+  const ttl = ttlSeconds ?? DEFAULT_APPROVAL_TTL_SECONDS;
+  if (!Number.isInteger(ttl) || ttl < 1) throw new Error('Approval token ttl_seconds must be a positive integer.');
+  if (ttl > maxSeconds) throw new Error(`Approval token ttl_seconds must be <= ${maxSeconds}.`);
+  return ttl;
 }
 
 function base64urlJson(value: unknown): string {

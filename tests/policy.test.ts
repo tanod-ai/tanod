@@ -22,6 +22,8 @@ test('requires approval for production shell write commands', async () => {
   assert.equal(decision.decision, 'require_approval');
   assert.equal(decision.risk_level, 'L3');
   assert.deepEqual(decision.policy_ids, ['approve-prod-shell-write']);
+  assert.deepEqual(decision.approval?.required_roles, ['platform_owner']);
+  assert.equal(decision.approval?.token_ttl_seconds, 900);
   assert.match(decision.argument_hash, /^sha256:/);
 });
 
@@ -43,4 +45,5 @@ test('requires approval for admin role grants', async () => {
   assert.equal(decision.decision, 'require_approval');
   assert.equal(decision.risk_level, 'L4');
   assert.deepEqual(decision.policy_ids, ['approve-admin-role-grants']);
+  assert.deepEqual(decision.approval?.required_roles, ['system_owner', 'security_owner']);
 });

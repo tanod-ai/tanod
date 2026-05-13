@@ -92,18 +92,16 @@ test('execution rejects approval token if request arguments change', async () =>
     keys.privateKeyPem,
   );
   const tampered: ToolCallRequest = { ...toolCall, arguments: { command: 'sudo systemctl stop openclaw-gateway' } };
-  const log = await auditLog();
-  await assert.rejects(
-    () =>
-      executeGovernedToolCall({
-        input: { request: tampered, approval_token: token },
-        policyFile,
-        auditLog: log,
-        adapters: createAdapterRegistry({ enableShellExecution: false, shellTimeoutMs: 1000, httpTimeoutMs: 1000 }),
-        publicKeyPem: keys.publicKeyPem,
-      }),
-    /argument hash does not match/,
-  );
+  const response = await executeGovernedToolCall({
+    input: { request: tampered, approval_token: token },
+    policyFile,
+    auditLog: await auditLog(),
+    adapters: createAdapterRegistry({ enableShellExecution: false, shellTimeoutMs: 1000, httpTimeoutMs: 1000 }),
+    publicKeyPem: keys.publicKeyPem,
+  });
+  assert.equal(response.executed, false);
+  assert.equal(response.result.status, 'blocked');
+  assert.match(response.result.error ?? '', /argument hash does not match/);
 });
 
 test('allowed shell command executes when shell adapter is explicitly enabled', async () => {

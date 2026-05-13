@@ -82,3 +82,20 @@ test('mcp.call_tool reports JSON-RPC errors as failures', async () => {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
 });
+
+test('adapters return structured failures for malformed headers', async () => {
+  const adapter = createAdapterRegistry({ enableShellExecution: false, shellTimeoutMs: 1000, httpTimeoutMs: 1000 }).get('mcp.call_tool');
+  assert.ok(adapter);
+  const request: ToolCallRequest = {
+    version: 'v1',
+    request_id: 'req_bad_headers',
+    actor: { user_id: 'ross@example.com' },
+    agent: { agent_id: 'dev-agent', environment: 'dev' },
+    tool: { name: 'mcp.call_tool', category: 'mcp', operation: 'execute' },
+    target: { system: 'test-mcp', environment: 'dev' },
+    arguments: { server_url: 'http://127.0.0.1:1/mcp', tool_name: 'echo', headers: ['bad'] },
+  };
+  const result = await adapter.execute(request);
+  assert.equal(result.status, 'failure');
+  assert.match(result.error ?? '', /headers must be an object/);
+});

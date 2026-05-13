@@ -52,7 +52,16 @@ export async function executeGovernedToolCall(params: {
       await auditExecutionResult(auditLog, input.request, decision, result);
       return { request_id: input.request.request_id, decision, executed: false, result };
     }
-    approval = verifyApprovalToken(input.approval_token, publicKeyPem, input.request);
+    try {
+      approval = verifyApprovalToken(input.approval_token, publicKeyPem, input.request, undefined, {
+        policy_id: decision.policy_ids[0],
+        required_roles: decision.approval?.required_roles,
+      });
+    } catch (error) {
+      const result: ExecutionResult = { status: 'blocked', adapter: 'tanod', error: error instanceof Error ? error.message : 'Approval token rejected.' };
+      await auditExecutionResult(auditLog, input.request, decision, result);
+      return { request_id: input.request.request_id, decision, executed: false, result };
+    }
     await auditLog.append({
       event_type: 'execution.approval_verified',
       request_id: input.request.request_id,
@@ -74,9 +83,17 @@ export async function executeGovernedToolCall(params: {
     return approvalResponse(input.request.request_id, decision, false, result, approval);
   }
 
-  const result = await adapter.execute(input.request);
+  const result = await safelyExecuteAdapter(adapter, input.request);
   await auditExecutionResult(auditLog, input.request, decision, result, approval);
   return approvalResponse(input.request.request_id, decision, result.status === 'success', result, approval);
+}
+
+async function safelyExecuteAdapter(adapter: ToolAdapter, request: ToolCallRequest): Promise<ExecutionResult> {
+  try {
+    return await adapter.execute(request);
+  } catch (error) {
+    return { status: 'failure', adapter: adapter.name, error: error instanceof Error ? error.message : 'Adapter execution failed.' };
+  }
 }
 
 function approvalResponse(
