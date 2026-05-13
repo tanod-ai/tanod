@@ -548,6 +548,80 @@ jq -n --slurpfile request examples/requests/shell-write-prod.json \
       --data @- | jq
 ```
 
+
+## Manual CLI testing
+
+From the repository root, install dependencies and build once:
+
+```bash
+cd /home/ross/projects/tanod
+npm install
+npm run build
+```
+
+Start Tanod in one terminal. For unauthenticated local-only testing:
+
+```bash
+TANOD_HOST=127.0.0.1 npm run dev
+```
+
+For LAN testing or anything beyond localhost, use an API key:
+
+```bash
+TANOD_API_KEYS=dev-key npm run dev
+```
+
+In another terminal, point the CLI at the running gateway:
+
+```bash
+export TANOD_URL=http://127.0.0.1:8787
+# Required only if the server was started with TANOD_API_KEYS.
+export TANOD_API_KEY=dev-key
+```
+
+Run basic CLI checks:
+
+```bash
+# Help
+tanod help
+
+# Policy decision: should require approval
+tanod decide examples/requests/shell-write-prod.json
+
+# Create approval request
+tanod request-approval examples/requests/shell-write-prod.json --by ross@example.com
+
+# List pending approvals
+tanod approvals --status pending
+```
+
+Copy the returned `approval_id`, then approve it:
+
+```bash
+tanod approve appr_... --by ross@example.com --role platform_owner
+```
+
+Verify the audit chain:
+
+```bash
+tanod audit-verify .tanod/audit.jsonl
+```
+
+Test an allowed read-only request:
+
+```bash
+tanod decide examples/requests/shell-readonly.json
+tanod execute examples/requests/shell-readonly.json
+```
+
+`Shell.exec` execution is disabled by default. To allow shell adapter execution in a trusted local environment:
+
+```bash
+TANOD_ENABLE_SHELL_EXECUTION=true npm run dev
+```
+
+Policy decisions, approval requests, and audit logging work even when shell execution is disabled.
+
 ## v0.1 roadmap
 
 The first release should prove the core idea end-to-end:

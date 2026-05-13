@@ -4,6 +4,7 @@ import { verifyAuditChain } from './audit.js';
 import type { AuditEvent } from './domain.js';
 
 const baseUrl = process.env.TANOD_URL ?? 'http://127.0.0.1:8787';
+const apiKey = process.env.TANOD_API_KEY;
 const [, , command, ...args] = process.argv;
 
 try {
@@ -58,14 +59,21 @@ async function postFile(path: string, filePath: string | undefined): Promise<voi
 async function postJson(path: string, body: unknown): Promise<void> {
   const response = await fetch(`${baseUrl}${path}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: requestHeaders(),
     body: JSON.stringify(body),
   });
   await printResponse(response);
 }
 
 async function get(path: string): Promise<void> {
-  await printResponse(await fetch(`${baseUrl}${path}`));
+  await printResponse(await fetch(`${baseUrl}${path}`, { headers: requestHeaders() }));
+}
+
+function requestHeaders(): Record<string, string> {
+  return {
+    'content-type': 'application/json',
+    ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
+  };
 }
 
 async function printResponse(response: Response): Promise<void> {
@@ -112,5 +120,6 @@ function help(): void {
   tanod audit-verify [audit.jsonl]
 
 Environment:
-  TANOD_URL=http://127.0.0.1:8787`);
+  TANOD_URL=http://127.0.0.1:8787
+  TANOD_API_KEY=<key if server uses TANOD_API_KEYS>`);
 }
