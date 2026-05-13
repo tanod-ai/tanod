@@ -24,9 +24,9 @@ Tanod is in early v0.1 development. The current repository contains the first ex
 - Tamper-evident append-only audit log primitive
 - Postgres-backed storage for tool calls, approvals, and audit events
 - Persistent approval request queue with approve/reject lifecycle
-- `tanod` CLI for decisions, approvals, execution, and audit verification
+- Native Go `tanod` CLI for decisions, approvals, execution, and audit verification
 - Dockerfile and Docker Compose deployment with Postgres
-- Built-in `/console` approval UI for pending approvals
+- Standalone React/Vite web console in `apps/console`
 - Optional API-key authentication via `TANOD_API_KEYS`
 - Example policies and tool-call requests
 - Node test suite for policy, signing, guarded execution, adapters, and audit behavior
@@ -407,17 +407,33 @@ Tanod sends:
 
 Policy still decides whether the MCP tool call is allowed, denied, or requires signed approval before Tanod contacts the MCP server.
 
-## Approval console
+## Web console
 
-Tanod serves a minimal built-in approval console at:
+The web console is a standalone React/Vite application in `apps/console`. It is separate from the gateway so it can evolve as a real UI rather than inline server-rendered HTML.
 
-```text
-http://127.0.0.1:8787/console
+Run the gateway in one terminal:
+
+```bash
+TANOD_API_KEYS=dev-key npm run dev
 ```
 
-By default the server binds to `0.0.0.0`, so you can also reach it from another machine on your LAN using `http://<host-lan-ip>:8787/console`. If you expose Tanod beyond localhost, set `TANOD_API_KEYS`; this API can approve and execute tool calls.
+Run the console in another terminal:
 
-The console lists approval requests, displays exact tool arguments and argument hashes, and can approve or reject pending requests. Use the status filter to switch between pending, all, approved, rejected, and expired requests. If `TANOD_API_KEYS` is configured, the console page still loads, but API calls require entering an API key in the console toolbar.
+```bash
+cd apps/console
+npm install
+npm run dev
+```
+
+Open:
+
+```text
+http://127.0.0.1:5173
+```
+
+The Vite dev server proxies `/v1` and `/healthz` to `http://127.0.0.1:8787`. For a remote gateway, set the API base in the console UI or build/run with `VITE_TANOD_API_BASE=http://<gateway-host>:8787`. The gateway responds to browser CORS preflight requests so the standalone console can call the API from a separate origin.
+
+The console lists approval requests, displays exact tool arguments and argument hashes, and can approve or reject pending requests. Use the status filter to switch between pending, all, approved, rejected, and expired requests. If `TANOD_API_KEYS` is configured, enter the matching API key in the console.
 
 A plain `tanod decide` call does not create a persistent approval request. To make an item appear in the console, create one with `tanod request-approval <request.json> --by <user>` or `POST /v1/approval-requests`.
 
@@ -477,6 +493,8 @@ x-tanod-api-key: key-one
 ├── examples/
 │   ├── policies/         # starter policies
 │   └── requests/         # sample agent tool calls
+├── apps/console/       # standalone React/Vite web console
+├── cli/                # native Go CLI
 ├── db/schema.sql
 ├── deployments/docker-compose/docker-compose.yml
 ├── Dockerfile
@@ -553,12 +571,12 @@ jq -n --slurpfile request examples/requests/shell-write-prod.json \
 
 ## Manual CLI testing
 
-From the repository root, install dependencies and build once:
+Build the native Go CLI from the repository root:
 
 ```bash
 cd /home/ross/projects/tanod
-npm install
-npm run build
+mkdir -p bin
+(cd cli && go build -o ../bin/tanod ./cmd/tanod)
 ```
 
 Start Tanod in one terminal. For unauthenticated local-only testing:
@@ -585,35 +603,35 @@ Run basic CLI checks:
 
 ```bash
 # Help
-tanod help
+./bin/tanod help
 
 # Policy decision: should require approval
-tanod decide examples/requests/shell-write-prod.json
+./bin/tanod decide examples/requests/shell-write-prod.json
 
 # Create approval request
-tanod request-approval examples/requests/shell-write-prod.json --by ross@example.com
+./bin/tanod request-approval examples/requests/shell-write-prod.json --by ross@example.com
 
 # List pending approvals
-tanod approvals --status pending
+./bin/tanod approvals --status pending
 ```
 
 Copy the returned `approval_id`, then approve it:
 
 ```bash
-tanod approve appr_... --by ross@example.com --role platform_owner
+./bin/tanod approve appr_... --by ross@example.com --role platform_owner
 ```
 
 Verify the audit chain:
 
 ```bash
-tanod audit-verify .tanod/audit.jsonl
+./bin/tanod audit-verify .tanod/audit.jsonl
 ```
 
 Test an allowed read-only request:
 
 ```bash
-tanod decide examples/requests/shell-readonly.json
-tanod execute examples/requests/shell-readonly.json
+./bin/tanod decide examples/requests/shell-readonly.json
+./bin/tanod execute examples/requests/shell-readonly.json
 ```
 
 `Shell.exec` execution is disabled by default. To allow shell adapter execution in a trusted local environment:
@@ -640,9 +658,9 @@ The first release should prove the core idea end-to-end:
 - [x] Add shell adapter
 - [x] Add HTTP adapter
 - [x] Add MCP adapter
-- [x] Add `tanod` CLI
+- [x] Add native Go `tanod` CLI
 - [x] Add Docker Compose deployment
-- [x] Add basic web approval console
+- [x] Add standalone React/Vite web approval console
 - [x] Add Postgres storage layer
 - [x] Add optional API-key auth
 - [x] Add GitHub Actions CI

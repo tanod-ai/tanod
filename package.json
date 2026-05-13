@@ -13,9 +13,6 @@
     "check": "npm run build && npm test",
     "server": "node dist/src/index.js server"
   },
-  "bin": {
-    "tanod": "dist/src/cli.js"
-  },
   "engines": {
     "node": ">=22"
   },

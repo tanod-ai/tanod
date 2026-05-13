@@ -2,7 +2,6 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { createAdapterRegistry, type ToolAdapter } from './adapters.js';
-import { approvalConsoleHtml } from './console.js';
 import { AuditLog } from './audit.js';
 import { hashArguments } from './canonical.js';
 import type { DecisionResponse, PolicyFile, ToolCallRequest } from './domain.js';
@@ -38,6 +37,12 @@ export async function startServer(config: ServerConfig): Promise<void> {
 
   const server = createServer(async (request, response) => {
     try {
+      writeCorsHeaders(response);
+      if (request.method === 'OPTIONS') {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
       if (!isAuthorized(request, config.apiKeys)) {
         json(response, 401, { error: 'unauthorized' });
         return;
@@ -66,11 +71,6 @@ async function route(
 
   if (method === 'GET' && url.pathname === '/healthz') {
     json(response, 200, { status: 'ok', service: 'tanod-gateway', adapters: [...adapters.keys()] });
-    return;
-  }
-
-  if (method === 'GET' && url.pathname === '/console') {
-    html(response, 200, approvalConsoleHtml());
     return;
   }
 
@@ -124,8 +124,6 @@ async function route(
     json(response, 200, { approval_token: token, argument_hash: claims.tool_args_hash, expires_at: new Date(claims.exp * 1000).toISOString() });
     return;
   }
-
-
 
   if (method === 'POST' && url.pathname === '/v1/approval-requests') {
     const body = await readJson<{ request: ToolCallRequest; requested_by?: string }>(request);
@@ -311,7 +309,6 @@ async function auditDecision(auditLog: AuditLog, toolCall: ToolCallRequest, deci
 function isAuthorized(request: IncomingMessage, apiKeys: string[]): boolean {
   if (apiKeys.length === 0) return true;
   if (request.method === 'GET' && request.url?.startsWith('/healthz')) return true;
-  if (request.method === 'GET' && request.url?.startsWith('/console')) return true;
   const authorization = request.headers.authorization ?? '';
   const bearer = authorization.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : undefined;
   const headerKey = request.headers['x-tanod-api-key'];
@@ -334,9 +331,10 @@ async function readJson<T>(request: IncomingMessage): Promise<T> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as T;
 }
 
-function html(response: ServerResponse, statusCode: number, body: string): void {
-  response.writeHead(statusCode, { 'content-type': 'text/html; charset=utf-8' });
-  response.end(body);
+function writeCorsHeaders(response: ServerResponse): void {
+  response.setHeader('access-control-allow-origin', '*');
+  response.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS');
+  response.setHeader('access-control-allow-headers', 'content-type,authorization,x-tanod-api-key');
 }
 
 function json(response: ServerResponse, statusCode: number, body: unknown): void {

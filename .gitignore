@@ -4,3 +4,7 @@ coverage/
 .env
 *.log
 .tanod/
+bin/
+apps/console/dist/
+apps/console/node_modules/
+*.tsbuildinfo

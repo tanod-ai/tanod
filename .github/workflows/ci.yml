@@ -18,5 +18,17 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: cli/go.mod
       - run: npm ci
       - run: npm test
+      - run: go test ./...
+        working-directory: cli
+      - run: go build -o ../bin/tanod ./cmd/tanod
+        working-directory: cli
+      - run: npm ci
+        working-directory: apps/console
+      - run: npm run build
+        working-directory: apps/console
