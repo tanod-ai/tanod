@@ -50,15 +50,25 @@ export class AuditLog {
     try {
       const raw = await readFile(this.filePath, 'utf8');
       const lines = raw.split('\n').filter(Boolean);
+      let fileHash: string | null = null;
       if (lines.length > 0) {
         const last = JSON.parse(lines[lines.length - 1]) as AuditEvent;
-        this.previousHash = last.event_hash ?? null;
+        fileHash = last.event_hash ?? null;
       }
-      this.initialized = true;
+      await this.initializeFromHashes(fileHash);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      this.initialized = true;
+      await this.initializeFromHashes(null);
     }
+  }
+
+  private async initializeFromHashes(fileHash: string | null): Promise<void> {
+    const storageHash = (await this.storage?.getLatestAuditHash()) ?? null;
+    if (fileHash && storageHash && fileHash !== storageHash) {
+      throw new Error('Audit chain head mismatch between JSONL file and durable storage. Refusing to append.');
+    }
+    this.previousHash = fileHash ?? storageHash;
+    this.initialized = true;
   }
 }
 

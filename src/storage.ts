@@ -52,6 +52,7 @@ export interface Storage {
   approveApprovalRequest(approvalId: string, input: ApprovalApproveInput): Promise<ApprovalRequestRecord>;
   rejectApprovalRequest(approvalId: string, input: ApprovalRejectInput): Promise<ApprovalRequestRecord>;
   recordAuditEvent(event: AuditEvent): Promise<void>;
+  getLatestAuditHash(): Promise<string | null>;
 }
 
 export class MemoryStorage implements Storage {
@@ -121,6 +122,11 @@ export class MemoryStorage implements Storage {
 
   async recordAuditEvent(event: AuditEvent): Promise<void> {
     this.auditEvents.set(event.event_id, event);
+  }
+
+  async getLatestAuditHash(): Promise<string | null> {
+    const events = [...this.auditEvents.values()];
+    return events.at(-1)?.event_hash ?? null;
   }
 
   private async requireApproval(approvalId: string): Promise<ApprovalRequestRecord> {
@@ -217,6 +223,13 @@ export class PostgresStorage implements Storage {
        ON CONFLICT (event_id) DO NOTHING`,
       [event.event_id, event.event_type, event.request_id ?? null, event.previous_hash ?? null, event.event_hash, JSON.stringify(event)],
     );
+  }
+
+  async getLatestAuditHash(): Promise<string | null> {
+    const result = await this.pool.query<{ event_hash: string }>(
+      `SELECT event_hash FROM tanod_audit_events ORDER BY created_at DESC, event_id DESC LIMIT 1`,
+    );
+    return result.rows[0]?.event_hash ?? null;
   }
 }
 

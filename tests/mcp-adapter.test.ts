@@ -117,3 +117,44 @@ test('http.request blocks private network targets by default', async () => {
   assert.equal(result.status, 'blocked');
   assert.match(result.error ?? '', /Private HTTP targets are blocked/);
 });
+
+
+test('http.request does not follow redirects', async () => {
+  let redirectedTargetHit = false;
+  const target = createServer((_request, response) => {
+    redirectedTargetHit = true;
+    response.end('private');
+  });
+  await new Promise<void>((resolve) => target.listen(0, '127.0.0.1', resolve));
+  const redirector = createServer((_request, response) => {
+    const address = target.address();
+    assert.equal(typeof address, 'object');
+    response.writeHead(302, { location: `http://127.0.0.1:${(address as { port: number }).port}/private` });
+    response.end();
+  });
+  await new Promise<void>((resolve) => redirector.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = redirector.address();
+    assert.equal(typeof address, 'object');
+    const adapter = createAdapterRegistry({ enableShellExecution: false, shellTimeoutMs: 1000, httpTimeoutMs: 1000, allowPrivateNetworkHttp: true }).get('http.request');
+    assert.ok(adapter);
+    const request: ToolCallRequest = {
+      version: 'v1',
+      request_id: 'req_redirect',
+      actor: { user_id: 'ross@example.com' },
+      agent: { agent_id: 'dev-agent', environment: 'dev' },
+      tool: { name: 'http.request', category: 'network', operation: 'read' },
+      target: { system: 'redirector', environment: 'dev' },
+      arguments: { method: 'GET', url: `http://127.0.0.1:${(address as { port: number }).port}/redirect` },
+    };
+    const result = await adapter.execute(request);
+    assert.equal(result.status, 'blocked');
+    assert.match(result.error ?? '', /redirects are blocked/);
+    assert.equal(redirectedTargetHit, false);
+  } finally {
+    await Promise.all([
+      new Promise<void>((resolve, reject) => redirector.close((error) => (error ? reject(error) : resolve()))),
+      new Promise<void>((resolve, reject) => target.close((error) => (error ? reject(error) : resolve()))),
+    ]);
+  }
+});

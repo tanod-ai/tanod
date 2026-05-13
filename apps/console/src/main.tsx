@@ -36,7 +36,7 @@ const defaultApiBase = import.meta.env.VITE_TANOD_API_BASE ?? '';
 
 function App() {
   const [apiBase, setApiBase] = useLocalStorage('tanod.console.apiBase', defaultApiBase);
-  const [apiKey, setApiKey] = useLocalStorage('tanod.console.apiKey', '');
+  const [apiKey, setApiKey] = useSessionStorage('tanod.console.apiKey', '');
   const [approver, setApprover] = useLocalStorage('tanod.console.approver', 'operator@example.com');
   const [approverRole, setApproverRole] = useLocalStorage('tanod.console.approverRole', 'platform_owner');
   const [status, setStatus] = useState<StatusFilter>('pending');
@@ -158,5 +158,12 @@ function ApprovalCard({ record, onApprove, onReject }: { record: ApprovalRequest
 function Meta({ label, value }: { label: string; value: string }) { return <div><span>{label}</span><strong>{value}</strong></div>; }
 function EmptyState({ status }: { status: StatusFilter }) { return <div className="empty"><h2>No {status} approval requests</h2><p>Create one with <code>tanod request-approval examples/requests/shell-write-prod.json --by ross@example.com</code>.</p><p>A plain <code>tanod decide</code> only evaluates policy and does not create a persistent console item.</p></div>; }
 function useLocalStorage(key: string, initial: string): [string, (value: string) => void] { const [value, setValue] = useState(() => localStorage.getItem(key) ?? initial); return [value, (next) => { localStorage.setItem(key, next); setValue(next); }]; }
+function useSessionStorage(key: string, initial: string): [string, (value: string) => void] {
+  const [value, setValue] = useState(() => {
+    localStorage.removeItem(key);
+    return sessionStorage.getItem(key) ?? initial;
+  });
+  return [value, (next) => { sessionStorage.setItem(key, next); setValue(next); }];
+}
 
 createRoot(document.getElementById('root')!).render(<App />);

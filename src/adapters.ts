@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process';
 import { lookup } from 'node:dns/promises';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import { isIP } from 'node:net';
 import { promisify } from 'node:util';
 import type { ToolCallRequest } from './domain.js';
@@ -124,16 +126,26 @@ function parseSimpleCommand(command: string): { ok: true; argv: string[] } | { o
   return { ok: true, argv };
 }
 
-async function validateHttpTarget(parsedUrl: URL, allowPrivateNetwork: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (allowPrivateNetwork) return { ok: true };
+interface ValidatedHttpTarget {
+  address?: string;
+  family?: 4 | 6;
+}
+
+async function validateHttpTarget(parsedUrl: URL, allowPrivateNetwork: boolean): Promise<{ ok: true; target: ValidatedHttpTarget } | { ok: false; error: string }> {
+  if (allowPrivateNetwork) return { ok: true, target: {} };
   const hostname = parsedUrl.hostname.toLowerCase();
   if (hostname === 'localhost' || hostname.endsWith('.localhost')) return { ok: false, error: 'Private HTTP targets are blocked by default.' };
   const literalKind = isIP(hostname);
-  if (literalKind !== 0) return isPrivateAddress(hostname) ? { ok: false, error: 'Private HTTP targets are blocked by default.' } : { ok: true };
+  if (literalKind !== 0) {
+    if (isPrivateAddress(hostname)) return { ok: false, error: 'Private HTTP targets are blocked by default.' };
+    return { ok: true, target: { address: hostname, family: literalKind as 4 | 6 } };
+  }
   try {
     const addresses = await lookup(hostname, { all: true, verbatim: true });
+    if (addresses.length === 0) return { ok: false, error: 'Could not resolve HTTP target.' };
     if (addresses.some((entry) => isPrivateAddress(entry.address))) return { ok: false, error: 'Private HTTP targets are blocked by default.' };
-    return { ok: true };
+    const selected = addresses[0];
+    return { ok: true, target: { address: selected.address, family: selected.family as 4 | 6 } };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Could not resolve HTTP target.' };
   }
@@ -268,32 +280,66 @@ async function executeHttp(
   const networkCheck = await validateHttpTarget(parsedUrl, allowPrivateNetwork);
   if (!networkCheck.ok) return { status: 'blocked', adapter, error: networkCheck.error };
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(parsedUrl, {
-      method,
-      headers,
-      body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
-      signal: controller.signal,
-    });
-    const text = await response.text();
-    return {
-      status: response.ok ? 'success' : 'failure',
-      adapter,
-      output: {
-        status: response.status,
-        status_text: response.statusText,
-        headers: Object.fromEntries(response.headers.entries()),
-        body: text.slice(0, 64 * 1024),
-        truncated: text.length > 64 * 1024,
+  return executePinnedHttp(adapter, parsedUrl, method, headers, body, timeoutMs, networkCheck.target);
+}
+
+
+function executePinnedHttp(
+  adapter: string,
+  parsedUrl: URL,
+  method: string,
+  headers: HeadersInit | undefined,
+  body: unknown,
+  timeoutMs: number,
+  target: ValidatedHttpTarget,
+): Promise<ExecutionResult> {
+  const client = parsedUrl.protocol === 'https:' ? httpsRequest : httpRequest;
+  const requestBody = body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body);
+  const requestHeaders = headers ? Object.fromEntries(new Headers(headers).entries()) : {};
+  return new Promise((resolve) => {
+    const req = client(
+      parsedUrl,
+      {
+        method,
+        headers: requestHeaders,
+        lookup: target.address
+          ? (_hostname, _options, callback) => callback(null, target.address!, target.family ?? 4)
+          : undefined,
       },
-    };
-  } catch (error) {
-    return { status: 'failure', adapter, error: error instanceof Error ? error.message : 'HTTP request failed.' };
-  } finally {
-    clearTimeout(timeout);
-  }
+      (res) => {
+        const chunks: Buffer[] = [];
+        let total = 0;
+        res.on('data', (chunk: Buffer) => {
+          if (total <= 64 * 1024) chunks.push(Buffer.from(chunk));
+          total += chunk.length;
+        });
+        res.on('end', () => {
+          const status = res.statusCode ?? 0;
+          const location = res.headers.location;
+          if (status >= 300 && status < 400 && location) {
+            resolve({ status: 'blocked', adapter, error: 'HTTP redirects are blocked to prevent SSRF bypasses.', metadata: { location } });
+            return;
+          }
+          const text = Buffer.concat(chunks).toString('utf8');
+          resolve({
+            status: status >= 200 && status < 300 ? 'success' : 'failure',
+            adapter,
+            output: {
+              status,
+              status_text: res.statusMessage ?? '',
+              headers: Object.fromEntries(Object.entries(res.headers).map(([key, value]) => [key, Array.isArray(value) ? value.join(', ') : String(value ?? '')])),
+              body: text.slice(0, 64 * 1024),
+              truncated: total > 64 * 1024,
+            },
+          });
+        });
+      },
+    );
+    req.setTimeout(timeoutMs, () => req.destroy(new Error('HTTP request timed out.')));
+    req.on('error', (error) => resolve({ status: 'failure', adapter, error: error.message }));
+    if (requestBody !== undefined) req.write(requestBody);
+    req.end();
+  });
 }
 
 function parseMcpBody(body: string): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {

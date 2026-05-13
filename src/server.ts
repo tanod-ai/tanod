@@ -338,16 +338,23 @@ function resolveApprovalTtl(requestedTtlSeconds: number | undefined, decision: D
 }
 
 async function loadOrCreateKeys(privateKeyFile: string, publicKeyFile: string): Promise<{ privateKeyPem: string; publicKeyPem: string }> {
-  try {
-    const [privateKeyPem, publicKeyPem] = await Promise.all([readFile(privateKeyFile, 'utf8'), readFile(publicKeyFile, 'utf8')]);
-    return { privateKeyPem, publicKeyPem };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  const [privateResult, publicResult] = await Promise.allSettled([readFile(privateKeyFile, 'utf8'), readFile(publicKeyFile, 'utf8')]);
+  if (privateResult.status === 'fulfilled' && publicResult.status === 'fulfilled') {
+    return { privateKeyPem: privateResult.value, publicKeyPem: publicResult.value };
+  }
+  const privateMissing = privateResult.status === 'rejected' && (privateResult.reason as NodeJS.ErrnoException).code === 'ENOENT';
+  const publicMissing = publicResult.status === 'rejected' && (publicResult.reason as NodeJS.ErrnoException).code === 'ENOENT';
+  if (privateMissing && publicMissing) {
     const keys = generateSigningKeyPair();
     await mkdir(dirname(privateKeyFile), { recursive: true });
     await Promise.all([writeFile(privateKeyFile, keys.privateKeyPem, { mode: 0o600 }), writeFile(publicKeyFile, keys.publicKeyPem, { mode: 0o644 })]);
     return keys;
   }
+  if (privateMissing || publicMissing) {
+    throw new Error('Partial approval signing key loss detected. Refusing to rotate keys automatically. Restore the missing key file or intentionally rotate both keys.');
+  }
+  if (privateResult.status === 'rejected') throw privateResult.reason;
+  throw publicResult.status === 'rejected' ? publicResult.reason : new Error('Could not load approval signing keys.');
 }
 
 async function auditDecision(auditLog: AuditLog, toolCall: ToolCallRequest, decision: DecisionResponse): Promise<void> {

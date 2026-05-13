@@ -372,7 +372,7 @@ Arguments:
 }
 ```
 
-The HTTP adapter supports `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`. Response bodies are capped in the execution result to avoid unbounded audit payloads. Private and loopback network targets are blocked by default to reduce SSRF risk; set `TANOD_ALLOW_PRIVATE_NETWORK_HTTP=true` only for isolated development or explicitly trusted internal MCP/HTTP targets.
+The HTTP adapter supports `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`. Response bodies are capped in the execution result to avoid unbounded audit payloads. Private and loopback network targets are blocked by default to reduce SSRF risk; set `TANOD_ALLOW_PRIVATE_NETWORK_HTTP=true` only for isolated development or explicitly trusted internal MCP/HTTP targets. HTTP redirects are not followed, and public DNS results are pinned for the outbound request so redirects and DNS rebinding cannot bypass private-network checks.
 
 ### `mcp.call_tool`
 
@@ -435,7 +435,7 @@ http://127.0.0.1:5173
 
 The Vite dev server proxies `/v1` and `/healthz` to `http://127.0.0.1:8787`. For a remote gateway, set the API base in the console UI or build/run with `VITE_TANOD_API_BASE=http://<gateway-host>:8787`. The gateway responds to browser CORS preflight requests so the standalone console can call the API from a separate origin.
 
-The console lists approval requests, displays exact tool arguments and argument hashes, and can approve or reject pending requests. Use the status filter to switch between pending, all, approved, rejected, and expired requests. If `TANOD_API_KEYS` is configured, enter the matching API key in the console. Approval APIs enforce policy-required roles; configure key roles with `TANOD_API_KEY_ROLES`, for example `dev-key:platform_owner` or `ops-key:platform_owner,security_owner;sec-key:security_owner`. You can also bind API keys to approver identities with `TANOD_API_KEY_IDENTITIES`, for example `dev-key:ross@example.com`.
+The console lists approval requests, displays exact tool arguments and argument hashes, and can approve or reject pending requests. Use the status filter to switch between pending, all, approved, rejected, and expired requests. If `TANOD_API_KEYS` is configured, enter the matching API key in the console. The key is kept in browser session storage, not localStorage, so it is not persisted across browser sessions. Approval APIs enforce policy-required roles; configure key roles with `TANOD_API_KEY_ROLES`, for example `dev-key:platform_owner` or `ops-key:platform_owner,security_owner;sec-key:security_owner`. You can also bind API keys to approver identities with `TANOD_API_KEY_IDENTITIES`, for example `dev-key:ross@example.com`.
 
 A plain `tanod decide` call does not create a persistent approval request. To make an item appear in the console, create one with `tanod request-approval <request.json> --by <user>` or `POST /v1/approval-requests`.
 
@@ -535,7 +535,7 @@ Defaults:
 - Host: `127.0.0.1` (loopback only; set `TANOD_HOST=0.0.0.0` for LAN/server use)
 - Port: `8787`
 - Policy file: `examples/policies/default.json`
-- Audit file: `.tanod/audit.jsonl`
+- Audit file: `.tanod/audit.jsonl`; when durable storage is configured, Tanod verifies the JSONL head against the durable audit head before appending
 - Postgres URL: optional `TANOD_DATABASE_URL`
 - API keys: required for non-loopback binds unless `TANOD_ALLOW_UNAUTHENTICATED=true` is explicitly set
 - API key roles: optional `TANOD_API_KEY_ROLES` as `key:role,role;other-key:role`
@@ -544,7 +544,7 @@ Defaults:
 - Shell execution: disabled unless `TANOD_ENABLE_SHELL_EXECUTION=true`
 - Shell timeout: `10000` ms
 - HTTP timeout: `10000` ms
-- Private HTTP targets: blocked unless `TANOD_ALLOW_PRIVATE_NETWORK_HTTP=true`
+- Private HTTP targets: blocked unless `TANOD_ALLOW_PRIVATE_NETWORK_HTTP=true`; redirects are blocked
 
 Example decision request:
 

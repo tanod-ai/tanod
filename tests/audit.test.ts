@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { AuditLog, verifyAuditChain } from '../src/audit.js';
 import type { AuditEvent } from '../src/domain.js';
+import { MemoryStorage } from '../src/storage.js';
 
 test('audit log writes a verifiable hash chain', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'tanod-audit-'));
@@ -49,4 +50,40 @@ test('audit log serializes concurrent appends into a valid chain', async () => {
     .map((line) => JSON.parse(line) as AuditEvent);
   assert.equal(events.length, 25);
   assert.equal(verifyAuditChain(events), true);
+});
+
+
+test('audit log continues from durable storage when JSONL file is missing', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'tanod-audit-storage-head-'));
+  const path = join(dir, 'audit.jsonl');
+  const storage = new MemoryStorage();
+  const storedHead = 'sha256:stored-head';
+  await storage.recordAuditEvent({
+    event_id: 'evt_existing',
+    event_type: 'decision.evaluated',
+    timestamp: new Date().toISOString(),
+    event_hash: storedHead,
+  });
+  const audit = new AuditLog(path, storage);
+  const event = await audit.append({ event_type: 'decision.evaluated', request_id: 'req_after_storage', decision: 'allow', risk_level: 'L1' });
+  assert.equal(event.previous_hash, storedHead);
+});
+
+test('audit log refuses mismatched JSONL and durable storage heads', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'tanod-audit-mismatch-'));
+  const path = join(dir, 'audit.jsonl');
+  const storage = new MemoryStorage();
+  await storage.recordAuditEvent({
+    event_id: 'evt_existing',
+    event_type: 'decision.evaluated',
+    timestamp: new Date().toISOString(),
+    event_hash: 'sha256:storage-head',
+  });
+  const audit = new AuditLog(path);
+  await audit.append({ event_type: 'decision.evaluated', request_id: 'req_file', decision: 'allow', risk_level: 'L1' });
+  const auditWithStorage = new AuditLog(path, storage);
+  await assert.rejects(
+    () => auditWithStorage.append({ event_type: 'decision.evaluated', request_id: 'req_reject', decision: 'allow', risk_level: 'L1' }),
+    /Audit chain head mismatch/,
+  );
 });

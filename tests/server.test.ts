@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile, mkdtemp } from 'node:fs/promises';
+import { readFile, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -155,4 +155,27 @@ test('rejecting a finalized approval returns conflict', async (t) => {
   const created = await createdResponse.json() as { approval_id: string };
   assert.equal((await post(base, `/v1/approval-requests/${created.approval_id}/approve`, { approved_by: 'ross@example.com', approved_role: 'platform_owner' })).status, 200);
   assert.equal((await post(base, `/v1/approval-requests/${created.approval_id}/reject`, { rejected_by: 'ross@example.com' })).status, 409);
+});
+
+
+test('server refuses partial signing-key loss', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'tanod-partial-key-'));
+  const privateKeyFile = join(dir, 'private.pem');
+  await writeFile(privateKeyFile, 'not-a-real-key');
+  await assert.rejects(
+    () =>
+      startServer({
+        host: '127.0.0.1',
+        port: 0,
+        policyFile: 'examples/policies/default.json',
+        auditFile: join(dir, 'audit.jsonl'),
+        privateKeyFile,
+        publicKeyFile: join(dir, 'public.pem'),
+        enableShellExecution: false,
+        shellTimeoutMs: 1000,
+        httpTimeoutMs: 1000,
+        apiKeys: [],
+      }),
+    /Partial approval signing key loss/,
+  );
 });
