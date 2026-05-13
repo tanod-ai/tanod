@@ -47,7 +47,7 @@ async function main(cmd: string | undefined, args: string[]): Promise<void> {
       help();
       return;
     default:
-      throw new Error(`Unknown command: ${cmd}. Run tanodctl help.`);
+      throw new Error(`Unknown command: ${cmd}. Run tanod help.`);
   }
 }
 
@@ -102,14 +102,14 @@ function required(value: string | undefined, label: string): string {
 }
 
 function help(): void {
-  console.log(`tanodctl commands:
-  tanodctl decide <request.json>
-  tanodctl execute <request.json> [--token <approval-token>]
-  tanodctl request-approval <request.json> [--by <user>]
-  tanodctl approvals [--status pending|approved|rejected|expired]
-  tanodctl approve <approval-id> --by <user> [--role <role>]
-  tanodctl reject <approval-id> --by <user> [--reason <reason>]
-  tanodctl audit-verify [audit.jsonl]
+  console.log(`tanod commands:
+  tanod decide <request.json>
+  tanod execute <request.json> [--token <approval-token>]
+  tanod request-approval <request.json> [--by <user>]
+  tanod approvals [--status pending|approved|rejected|expired]
+  tanod approve <approval-id> --by <user> [--role <role>]
+  tanod reject <approval-id> --by <user> [--reason <reason>]
+  tanod audit-verify [audit.jsonl]
 
 Environment:
   TANOD_URL=http://127.0.0.1:8787`);

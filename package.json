@@ -7,14 +7,14 @@
   "license": "Apache-2.0",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/src/index.js server",
+    "start": "npm run server",
     "dev": "node --loader ts-node/esm src/index.ts",
     "test": "npm run build && node --test dist/tests/*.test.js",
-    "check": "npm run build && npm test"
+    "check": "npm run build && npm test",
+    "server": "node dist/src/index.js server"
   },
   "bin": {
-    "tanod": "dist/src/index.js",
-    "tanodctl": "dist/src/cli.js"
+    "tanod": "dist/src/cli.js"
   },
   "engines": {
     "node": ">=22"

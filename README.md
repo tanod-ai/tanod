@@ -24,7 +24,7 @@ Tanod is in early v0.1 development. The current repository contains the first ex
 - Tamper-evident append-only audit log primitive
 - Postgres-backed storage for tool calls, approvals, and audit events
 - Persistent approval request queue with approve/reject lifecycle
-- `tanodctl` CLI for decisions, approvals, execution, and audit verification
+- `tanod` CLI for decisions, approvals, execution, and audit verification
 - Dockerfile and Docker Compose deployment with Postgres
 - Built-in `/console` approval UI for pending approvals
 - Optional API-key authentication via `TANOD_API_KEYS`
@@ -492,13 +492,13 @@ Example persistent approval flow:
 
 ```bash
 # Create a pending approval request.
-tanodctl request-approval examples/requests/shell-write-prod.json --by ross@example.com
+tanod request-approval examples/requests/shell-write-prod.json --by ross@example.com
 
 # List pending approvals.
-tanodctl approvals --status pending
+tanod approvals --status pending
 
 # Approve an exact request and receive a signed token.
-tanodctl approve appr_... --by ross@example.com --role platform_owner
+tanod approve appr_... --by ross@example.com --role platform_owner
 ```
 
 Example guarded execution request:
@@ -526,7 +526,7 @@ The first release should prove the core idea end-to-end:
 - [x] Add execution proxy abstraction
 - [x] Add shell adapter
 - [x] Add HTTP adapter
-- [x] Add `tanodctl` CLI
+- [x] Add `tanod` CLI
 - [x] Add Docker Compose deployment
 - [x] Add basic web approval console
 - [x] Add Postgres storage layer
