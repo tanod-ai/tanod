@@ -15,6 +15,7 @@ export interface ApprovalInput {
   policy_id: string;
   risk_level: RiskLevel;
   ttl_seconds?: number;
+  approval_id?: string;
 }
 
 export function generateSigningKeyPair(): KeyPairPem {
@@ -32,7 +33,7 @@ export function signApproval(input: ApprovalInput, privateKeyPem: string): { tok
     iss: 'tanod',
     sub: 'approval',
     aud: 'tanod-tool-proxy',
-    approval_id: `appr_${randomUUID()}`,
+    approval_id: input.approval_id ?? `appr_${randomUUID()}`,
     approved_by: input.approved_by,
     approved_role: input.approved_role,
     agent_id: input.request.agent.agent_id,

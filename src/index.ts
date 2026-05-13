@@ -11,6 +11,7 @@ const config = {
   enableShellExecution: process.env.TANOD_ENABLE_SHELL_EXECUTION === 'true',
   shellTimeoutMs: Number(process.env.TANOD_SHELL_TIMEOUT_MS ?? '10000'),
   httpTimeoutMs: Number(process.env.TANOD_HTTP_TIMEOUT_MS ?? '10000'),
+  apiKeys: (process.env.TANOD_API_KEYS ?? '').split(',').map((key) => key.trim()).filter(Boolean),
 };
 
 await startServer(config);

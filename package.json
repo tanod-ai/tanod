@@ -7,19 +7,24 @@
   "license": "Apache-2.0",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/src/index.js",
+    "start": "node dist/src/index.js server",
     "dev": "node --loader ts-node/esm src/index.ts",
     "test": "npm run build && node --test dist/tests/*.test.js",
     "check": "npm run build && npm test"
   },
   "bin": {
-    "tanod": "dist/src/index.js"
+    "tanod": "dist/src/index.js",
+    "tanodctl": "dist/src/cli.js"
   },
   "engines": {
     "node": ">=22"
   },
   "devDependencies": {
     "@types/node": "^22.15.18",
+    "@types/pg": "^8.20.0",
     "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "pg": "^8.20.0"
   }
 }

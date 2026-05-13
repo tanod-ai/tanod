@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tanod
+      POSTGRES_PASSWORD: tanod
+      POSTGRES_DB: tanod
+    ports:
+      - "5432:5432"
+    volumes:
+      - tanod-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tanod -d tanod"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  tanod:
+    build:
+      context: ../..
+    environment:
+      TANOD_HOST: 0.0.0.0
+      TANOD_PORT: 8787
+      TANOD_DATABASE_URL: postgres://tanod:tanod@postgres:5432/tanod
+      TANOD_POLICY_FILE: examples/policies/default.json
+      TANOD_AUDIT_FILE: /data/audit.jsonl
+      TANOD_PRIVATE_KEY_FILE: /data/ed25519-private.pem
+      TANOD_PUBLIC_KEY_FILE: /data/ed25519-public.pem
+      TANOD_API_KEYS: dev-local-key-change-me
+    ports:
+      - "8787:8787"
+    volumes:
+      - tanod-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  tanod-postgres:
+  tanod-data:

@@ -3,12 +3,16 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { canonicalize, sha256Hex } from './canonical.js';
 import type { AuditEvent } from './domain.js';
+import type { Storage } from './storage.js';
 
 export class AuditLog {
   private previousHash: string | null = null;
   private initialized = false;
 
-  constructor(private readonly filePath: string) {}
+  constructor(
+    private readonly filePath: string,
+    private readonly storage?: Storage,
+  ) {}
 
   async append(event: Omit<AuditEvent, 'event_id' | 'timestamp' | 'previous_hash' | 'event_hash'>): Promise<AuditEvent> {
     await this.initialize();
@@ -22,6 +26,7 @@ export class AuditLog {
     const signed: AuditEvent = { ...unsigned, event_hash: eventHash };
     await mkdir(dirname(this.filePath), { recursive: true });
     await appendFile(this.filePath, `${JSON.stringify(signed)}\n`, 'utf8');
+    await this.storage?.recordAuditEvent(signed);
     this.previousHash = eventHash;
     return signed;
   }

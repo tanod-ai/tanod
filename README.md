@@ -16,12 +16,17 @@ AI Agent → Tanod Gateway → Policy → Approval → Signed Execution → Audi
 
 Tanod is in early v0.1 development. The current repository contains the first executable gateway skeleton:
 
-- HTTP API for evaluating agent tool-call requests
+- HTTP API for evaluating and executing governed agent tool-call requests
 - Deterministic policy engine with allow / deny / require-approval decisions
 - Risk levels from L0 to L4
 - Canonical argument hashing
 - Ed25519 signed approval tokens bound to exact tool-call arguments
 - Tamper-evident append-only audit log primitive
+- Postgres-backed storage for tool calls, approvals, and audit events
+- Persistent approval request queue with approve/reject lifecycle
+- `tanodctl` CLI for decisions, approvals, execution, and audit verification
+- Dockerfile and Docker Compose deployment with Postgres
+- Optional API-key authentication via `TANOD_API_KEYS`
 - Example policies and tool-call requests
 - Node test suite for policy, signing, guarded execution, adapters, and audit behavior
 
@@ -229,9 +234,49 @@ Response:
 }
 ```
 
+### `POST /v1/approval-requests`
+
+Creates a persistent pending approval request for a tool call whose policy decision is `require_approval`.
+
+```json
+{
+  "request": { "...": "tool call request" },
+  "requested_by": "ross@example.com"
+}
+```
+
+Returns `202` with an approval request record containing `approval_id`, status, request, decision, argument hash, and timestamps.
+
+### `GET /v1/approval-requests?status=pending`
+
+Lists approval requests from durable storage. Supported statuses: `pending`, `approved`, `rejected`, `expired`.
+
+### `POST /v1/approval-requests/{approval_id}/approve`
+
+Approves a pending approval request and returns the updated record with a signed approval token bound to the original request arguments.
+
+```json
+{
+  "approved_by": "ross@example.com",
+  "approved_role": "platform_owner",
+  "ttl_seconds": 900
+}
+```
+
+### `POST /v1/approval-requests/{approval_id}/reject`
+
+Rejects a pending approval request.
+
+```json
+{
+  "rejected_by": "ross@example.com",
+  "reason": "Insufficient change context"
+}
+```
+
 ### `POST /v1/approvals`
 
-Signs an approval token for an exact tool-call request.
+Signs an approval token immediately for an exact tool-call request. This remains useful for tests and integrations that own their own approval UX; production flows should prefer persistent approval requests.
 
 Request:
 
@@ -326,6 +371,44 @@ Arguments:
 
 The HTTP adapter supports `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`. Response bodies are capped in the execution result to avoid unbounded audit payloads.
 
+## Storage
+
+Tanod supports Postgres-backed durable storage. Set `TANOD_DATABASE_URL` to enable it:
+
+```bash
+TANOD_DATABASE_URL=postgres://tanod:tanod@localhost:5432/tanod npm start
+```
+
+On startup, Tanod creates the required tables if they do not exist. The schema is also documented in `db/schema.sql`.
+
+Durable tables:
+
+- `tanod_tool_calls`
+- `tanod_approval_requests`
+- `tanod_audit_events`
+
+If `TANOD_DATABASE_URL` is absent, Tanod uses in-memory storage for local development and tests. Postgres should be used for any real deployment.
+
+## API authentication
+
+Set comma-separated API keys to require authentication for all non-health endpoints:
+
+```bash
+TANOD_API_KEYS=key-one,key-two npm start
+```
+
+Clients can authenticate with either:
+
+```http
+Authorization: Bearer key-one
+```
+
+or:
+
+```http
+x-tanod-api-key: key-one
+```
+
 ## Repository layout
 
 ```text
@@ -344,6 +427,9 @@ The HTTP adapter supports `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`. R
 ├── examples/
 │   ├── policies/         # starter policies
 │   └── requests/         # sample agent tool calls
+├── db/schema.sql
+├── deployments/docker-compose/docker-compose.yml
+├── Dockerfile
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -377,6 +463,8 @@ Defaults:
 - Port: `8787`
 - Policy file: `examples/policies/default.json`
 - Audit file: `.tanod/audit.jsonl`
+- Postgres URL: optional `TANOD_DATABASE_URL`
+- API keys: optional `TANOD_API_KEYS`
 - Shell execution: disabled unless `TANOD_ENABLE_SHELL_EXECUTION=true`
 - Shell timeout: `10000` ms
 - HTTP timeout: `10000` ms
@@ -387,6 +475,19 @@ Example decision request:
 curl -sS http://127.0.0.1:8787/v1/decisions \
   -H 'content-type: application/json' \
   --data @examples/requests/shell-write-prod.json | jq
+```
+
+Example persistent approval flow:
+
+```bash
+# Create a pending approval request.
+tanodctl request-approval examples/requests/shell-write-prod.json --by ross@example.com
+
+# List pending approvals.
+tanodctl approvals --status pending
+
+# Approve an exact request and receive a signed token.
+tanodctl approve appr_... --by ross@example.com --role platform_owner
 ```
 
 Example guarded execution request:
@@ -410,13 +511,15 @@ The first release should prove the core idea end-to-end:
 - [x] Sign approval tokens with Ed25519
 - [x] Verify approval tokens against exact arguments
 - [x] Write hash-chained audit events
-- [ ] Add persistent approval queue
+- [x] Add persistent approval queue
 - [x] Add execution proxy abstraction
 - [x] Add shell adapter
 - [x] Add HTTP adapter
-- [ ] Add `tanodctl` CLI
-- [ ] Add Docker Compose deployment
+- [x] Add `tanodctl` CLI
+- [x] Add Docker Compose deployment
 - [ ] Add basic web approval console
+- [x] Add Postgres storage layer
+- [x] Add optional API-key auth
 - [x] Add GitHub Actions CI
 
 ## Positioning

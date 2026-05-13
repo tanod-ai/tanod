@@ -8,6 +8,7 @@ import type { DecisionResponse, PolicyFile, ToolCallRequest } from './domain.js'
 import { executeGovernedToolCall, type ExecutionInput } from './execution.js';
 import { evaluatePolicy, loadPolicyFile } from './policy.js';
 import { generateSigningKeyPair, signApproval, verifyApprovalToken } from './signing.js';
+import { createStorageFromEnv, type ApprovalStatus, type Storage } from './storage.js';
 
 export interface ServerConfig {
   host: string;
@@ -19,11 +20,14 @@ export interface ServerConfig {
   enableShellExecution: boolean;
   shellTimeoutMs: number;
   httpTimeoutMs: number;
+  apiKeys: string[];
 }
 
 export async function startServer(config: ServerConfig): Promise<void> {
   const policyFile = await loadPolicyFile(config.policyFile);
-  const auditLog = new AuditLog(config.auditFile);
+  const storage = createStorageFromEnv(process.env);
+  await storage.initialize();
+  const auditLog = new AuditLog(config.auditFile, storage);
   const keys = await loadOrCreateKeys(config.privateKeyFile, config.publicKeyFile);
   const adapters = createAdapterRegistry({
     enableShellExecution: config.enableShellExecution,
@@ -33,7 +37,11 @@ export async function startServer(config: ServerConfig): Promise<void> {
 
   const server = createServer(async (request, response) => {
     try {
-      await route(request, response, policyFile, auditLog, keys, adapters);
+      if (!isAuthorized(request, config.apiKeys)) {
+        json(response, 401, { error: 'unauthorized' });
+        return;
+      }
+      await route(request, response, policyFile, auditLog, keys, adapters, storage);
     } catch (error) {
       json(response, 500, { error: error instanceof Error ? error.message : 'unknown error' });
     }
@@ -50,6 +58,7 @@ async function route(
   auditLog: AuditLog,
   keys: { privateKeyPem: string; publicKeyPem: string },
   adapters: Map<string, ToolAdapter>,
+  storage: Storage,
 ): Promise<void> {
   const method = request.method ?? 'GET';
   const url = new URL(request.url ?? '/', 'http://localhost');
@@ -63,6 +72,7 @@ async function route(
     const toolCall = await readJson<ToolCallRequest>(request);
     validateToolCall(toolCall);
     const decision = evaluatePolicy(policyFile, toolCall);
+    await storage.recordDecision(toolCall, decision);
     await auditDecision(auditLog, toolCall, decision);
     json(response, 200, decision);
     return;
@@ -106,6 +116,124 @@ async function route(
       details: { approved_role: body.approved_role, expires_at: new Date(claims.exp * 1000).toISOString() },
     });
     json(response, 200, { approval_token: token, argument_hash: claims.tool_args_hash, expires_at: new Date(claims.exp * 1000).toISOString() });
+    return;
+  }
+
+
+
+  if (method === 'POST' && url.pathname === '/v1/approval-requests') {
+    const body = await readJson<{ request: ToolCallRequest; requested_by?: string }>(request);
+    validateToolCall(body.request);
+    const decision = evaluatePolicy(policyFile, body.request);
+    await storage.recordDecision(body.request, decision);
+    await auditDecision(auditLog, body.request, decision);
+    if (decision.decision !== 'require_approval') {
+      json(response, 409, { error: `Request decision is ${decision.decision}; approval request not required.`, decision });
+      return;
+    }
+    const record = await storage.createApprovalRequest({
+      request: body.request,
+      decision,
+      requested_by: body.requested_by ?? body.request.actor.user_id,
+    });
+    await auditLog.append({
+      event_type: 'approval.requested',
+      request_id: body.request.request_id,
+      actor_id: record.requested_by,
+      agent_id: body.request.agent.agent_id,
+      tool_name: body.request.tool.name,
+      decision: decision.decision,
+      risk_level: decision.risk_level,
+      policy_ids: decision.policy_ids,
+      argument_hash: decision.argument_hash,
+      approval_id: record.approval_id,
+      result: 'blocked',
+    });
+    json(response, 202, record);
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/v1/approval-requests') {
+    const status = url.searchParams.get('status') as ApprovalStatus | null;
+    const records = await storage.listApprovalRequests(status ?? undefined);
+    json(response, 200, { approval_requests: records });
+    return;
+  }
+
+  const approvalApproveMatch = method === 'POST' ? url.pathname.match(/^\/v1\/approval-requests\/([^/]+)\/approve$/) : null;
+  if (approvalApproveMatch) {
+    const approvalId = decodeURIComponent(approvalApproveMatch[1]);
+    const body = await readJson<{ approved_by: string; approved_role?: string; ttl_seconds?: number }>(request);
+    const record = await storage.getApprovalRequest(approvalId);
+    if (!record) {
+      json(response, 404, { error: `Approval request not found: ${approvalId}` });
+      return;
+    }
+    if (record.status !== 'pending') {
+      json(response, 409, { error: `Approval request ${approvalId} is already ${record.status}.`, approval_request: record });
+      return;
+    }
+    const { token, claims } = signApproval(
+      {
+        request: record.request,
+        approved_by: body.approved_by,
+        approved_role: body.approved_role,
+        policy_id: record.decision.policy_ids[0] ?? 'manual',
+        risk_level: record.decision.risk_level,
+        ttl_seconds: body.ttl_seconds,
+        approval_id: record.approval_id,
+      },
+      keys.privateKeyPem,
+    );
+    const updated = await storage.approveApprovalRequest(approvalId, {
+      approved_by: body.approved_by,
+      approved_role: body.approved_role,
+      approval_token: token,
+      expires_at: new Date(claims.exp * 1000).toISOString(),
+    });
+    await auditLog.append({
+      event_type: 'approval.approved',
+      request_id: record.request_id,
+      actor_id: body.approved_by,
+      agent_id: record.request.agent.agent_id,
+      tool_name: record.request.tool.name,
+      decision: record.decision.decision,
+      risk_level: record.decision.risk_level,
+      policy_ids: record.decision.policy_ids,
+      argument_hash: claims.tool_args_hash,
+      approval_id: record.approval_id,
+      result: 'success',
+      details: { approved_role: body.approved_role, expires_at: updated.expires_at },
+    });
+    json(response, 200, updated);
+    return;
+  }
+
+  const approvalRejectMatch = method === 'POST' ? url.pathname.match(/^\/v1\/approval-requests\/([^/]+)\/reject$/) : null;
+  if (approvalRejectMatch) {
+    const approvalId = decodeURIComponent(approvalRejectMatch[1]);
+    const body = await readJson<{ rejected_by: string; reason?: string }>(request);
+    const record = await storage.getApprovalRequest(approvalId);
+    if (!record) {
+      json(response, 404, { error: `Approval request not found: ${approvalId}` });
+      return;
+    }
+    const updated = await storage.rejectApprovalRequest(approvalId, { rejected_by: body.rejected_by, reason: body.reason });
+    await auditLog.append({
+      event_type: 'approval.rejected',
+      request_id: record.request_id,
+      actor_id: body.rejected_by,
+      agent_id: record.request.agent.agent_id,
+      tool_name: record.request.tool.name,
+      decision: record.decision.decision,
+      risk_level: record.decision.risk_level,
+      policy_ids: record.decision.policy_ids,
+      argument_hash: record.argument_hash,
+      approval_id: record.approval_id,
+      result: 'blocked',
+      details: { reason: body.reason },
+    });
+    json(response, 200, updated);
     return;
   }
 
@@ -172,6 +300,16 @@ async function auditDecision(auditLog: AuditLog, toolCall: ToolCallRequest, deci
     policy_ids: decision.policy_ids,
     argument_hash: decision.argument_hash,
   });
+}
+
+function isAuthorized(request: IncomingMessage, apiKeys: string[]): boolean {
+  if (apiKeys.length === 0) return true;
+  if (request.method === 'GET' && request.url?.startsWith('/healthz')) return true;
+  const authorization = request.headers.authorization ?? '';
+  const bearer = authorization.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : undefined;
+  const headerKey = request.headers['x-tanod-api-key'];
+  const candidate = bearer ?? (Array.isArray(headerKey) ? headerKey[0] : headerKey);
+  return typeof candidate === 'string' && apiKeys.includes(candidate);
 }
 
 function validateToolCall(value: ToolCallRequest): void {
