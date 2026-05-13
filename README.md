@@ -26,6 +26,7 @@ Tanod is in early v0.1 development. The current repository contains the first ex
 - Persistent approval request queue with approve/reject lifecycle
 - `tanodctl` CLI for decisions, approvals, execution, and audit verification
 - Dockerfile and Docker Compose deployment with Postgres
+- Built-in `/console` approval UI for pending approvals
 - Optional API-key authentication via `TANOD_API_KEYS`
 - Example policies and tool-call requests
 - Node test suite for policy, signing, guarded execution, adapters, and audit behavior
@@ -371,6 +372,16 @@ Arguments:
 
 The HTTP adapter supports `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`. Response bodies are capped in the execution result to avoid unbounded audit payloads.
 
+## Approval console
+
+Tanod serves a minimal built-in approval console at:
+
+```text
+http://127.0.0.1:8787/console
+```
+
+The console lists pending approval requests, displays exact tool arguments and argument hashes, and can approve or reject requests. If `TANOD_API_KEYS` is configured, enter an API key in the console toolbar.
+
 ## Storage
 
 Tanod supports Postgres-backed durable storage. Set `TANOD_DATABASE_URL` to enable it:
@@ -517,7 +528,7 @@ The first release should prove the core idea end-to-end:
 - [x] Add HTTP adapter
 - [x] Add `tanodctl` CLI
 - [x] Add Docker Compose deployment
-- [ ] Add basic web approval console
+- [x] Add basic web approval console
 - [x] Add Postgres storage layer
 - [x] Add optional API-key auth
 - [x] Add GitHub Actions CI

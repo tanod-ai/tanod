@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { createAdapterRegistry, type ToolAdapter } from './adapters.js';
+import { approvalConsoleHtml } from './console.js';
 import { AuditLog } from './audit.js';
 import { hashArguments } from './canonical.js';
 import type { DecisionResponse, PolicyFile, ToolCallRequest } from './domain.js';
@@ -65,6 +66,11 @@ async function route(
 
   if (method === 'GET' && url.pathname === '/healthz') {
     json(response, 200, { status: 'ok', service: 'tanod-gateway', adapters: [...adapters.keys()] });
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/console') {
+    html(response, 200, approvalConsoleHtml());
     return;
   }
 
@@ -325,6 +331,11 @@ async function readJson<T>(request: IncomingMessage): Promise<T> {
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(Buffer.from(chunk));
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as T;
+}
+
+function html(response: ServerResponse, statusCode: number, body: string): void {
+  response.writeHead(statusCode, { 'content-type': 'text/html; charset=utf-8' });
+  response.end(body);
 }
 
 function json(response: ServerResponse, statusCode: number, body: unknown): void {
