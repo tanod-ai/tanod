@@ -315,7 +315,7 @@ The first release should prove the core idea end-to-end:
 - [ ] Add `tanodctl` CLI
 - [ ] Add Docker Compose deployment
 - [ ] Add basic web approval console
-- [ ] Add GitHub Actions CI
+- [x] Add GitHub Actions CI
 
 ## Positioning
 
