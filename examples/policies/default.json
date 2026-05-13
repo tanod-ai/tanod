@@ -8,14 +8,25 @@
       "description": "Block obviously destructive shell commands.",
       "priority": 1000,
       "when": {
-        "tool.name": { "equals": "shell.exec" },
-        "arguments.command": { "contains_any": ["rm -rf /", "mkfs", "dd if=", ":(){ :|:& };:"] }
+        "tool.name": {
+          "equals": "shell.exec"
+        },
+        "arguments.command": {
+          "contains_any": [
+            "rm -rf /",
+            "mkfs",
+            "dd if=",
+            ":(){ :|:& };:"
+          ]
+        }
       },
       "then": {
         "decision": "deny",
         "risk_level": "L4",
         "message": "Destructive shell command blocked by policy.",
-        "audit": { "severity": "critical" }
+        "audit": {
+          "severity": "critical"
+        }
       }
     },
     {
@@ -23,19 +34,29 @@
       "description": "Require approval for shell write commands on production targets.",
       "priority": 900,
       "when": {
-        "tool.name": { "equals": "shell.exec" },
-        "tool.operation": { "equals": "write" },
-        "target.environment": { "equals": "prod" }
+        "tool.name": {
+          "equals": "shell.exec"
+        },
+        "tool.operation": {
+          "equals": "write"
+        },
+        "target.environment": {
+          "equals": "prod"
+        }
       },
       "then": {
         "decision": "require_approval",
         "risk_level": "L3",
         "message": "Human approval required before executing shell command on production target.",
         "approval": {
-          "required_roles": ["platform_owner"],
+          "required_roles": [
+            "platform_owner"
+          ],
           "token_ttl_seconds": 900
         },
-        "audit": { "severity": "high" }
+        "audit": {
+          "severity": "high"
+        }
       }
     },
     {
@@ -43,18 +64,27 @@
       "description": "Require approval before granting administrator roles.",
       "priority": 800,
       "when": {
-        "tool.name": { "equals": "identity.grant_role" },
-        "arguments.role": { "matches": "[Aa][Dd][Mm][Ii][Nn]" }
+        "tool.name": {
+          "equals": "identity.grant_role"
+        },
+        "arguments.role": {
+          "matches": "[Aa][Dd][Mm][Ii][Nn]"
+        }
       },
       "then": {
         "decision": "require_approval",
         "risk_level": "L4",
         "message": "Granting administrator access requires human approval.",
         "approval": {
-          "required_roles": ["system_owner", "security_owner"],
+          "required_roles": [
+            "system_owner",
+            "security_owner"
+          ],
           "token_ttl_seconds": 900
         },
-        "audit": { "severity": "critical" }
+        "audit": {
+          "severity": "critical"
+        }
       }
     },
     {
@@ -62,15 +92,47 @@
       "description": "Allow common read-only diagnostic shell commands.",
       "priority": 100,
       "when": {
-        "tool.name": { "equals": "shell.exec" },
-        "tool.operation": { "equals": "read" },
-        "arguments.command": { "matches": "^(ls|cat /var/log/|journalctl|systemctl status|df|free|uptime|whoami)(\\s|$)" }
+        "tool.name": {
+          "equals": "shell.exec"
+        },
+        "tool.operation": {
+          "equals": "read"
+        },
+        "arguments.command": {
+          "matches": "^(ls|cat /var/log/|journalctl|systemctl status|df|free|uptime|whoami)(\\s|$)"
+        }
       },
       "then": {
         "decision": "allow",
         "risk_level": "L1",
         "message": "Read-only diagnostic command allowed.",
-        "audit": { "severity": "low" }
+        "audit": {
+          "severity": "low"
+        }
+      }
+    },
+    {
+      "id": "allow-public-http-get",
+      "description": "Allow read-only public HTTP GET requests.",
+      "priority": 90,
+      "when": {
+        "tool.name": {
+          "equals": "http.request"
+        },
+        "tool.operation": {
+          "equals": "read"
+        },
+        "arguments.method": {
+          "equals": "GET"
+        }
+      },
+      "then": {
+        "decision": "allow",
+        "risk_level": "L1",
+        "message": "Public read-only HTTP GET request allowed.",
+        "audit": {
+          "severity": "low"
+        }
       }
     }
   ]

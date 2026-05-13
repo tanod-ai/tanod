@@ -1,9 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { createAdapterRegistry, type ToolAdapter } from './adapters.js';
 import { AuditLog } from './audit.js';
 import { hashArguments } from './canonical.js';
 import type { DecisionResponse, PolicyFile, ToolCallRequest } from './domain.js';
+import { executeGovernedToolCall, type ExecutionInput } from './execution.js';
 import { evaluatePolicy, loadPolicyFile } from './policy.js';
 import { generateSigningKeyPair, signApproval, verifyApprovalToken } from './signing.js';
 
@@ -14,16 +16,24 @@ export interface ServerConfig {
   auditFile: string;
   privateKeyFile: string;
   publicKeyFile: string;
+  enableShellExecution: boolean;
+  shellTimeoutMs: number;
+  httpTimeoutMs: number;
 }
 
 export async function startServer(config: ServerConfig): Promise<void> {
   const policyFile = await loadPolicyFile(config.policyFile);
   const auditLog = new AuditLog(config.auditFile);
   const keys = await loadOrCreateKeys(config.privateKeyFile, config.publicKeyFile);
+  const adapters = createAdapterRegistry({
+    enableShellExecution: config.enableShellExecution,
+    shellTimeoutMs: config.shellTimeoutMs,
+    httpTimeoutMs: config.httpTimeoutMs,
+  });
 
   const server = createServer(async (request, response) => {
     try {
-      await route(request, response, policyFile, auditLog, keys);
+      await route(request, response, policyFile, auditLog, keys, adapters);
     } catch (error) {
       json(response, 500, { error: error instanceof Error ? error.message : 'unknown error' });
     }
@@ -39,12 +49,13 @@ async function route(
   policyFile: PolicyFile,
   auditLog: AuditLog,
   keys: { privateKeyPem: string; publicKeyPem: string },
+  adapters: Map<string, ToolAdapter>,
 ): Promise<void> {
   const method = request.method ?? 'GET';
   const url = new URL(request.url ?? '/', 'http://localhost');
 
   if (method === 'GET' && url.pathname === '/healthz') {
-    json(response, 200, { status: 'ok', service: 'tanod-gateway' });
+    json(response, 200, { status: 'ok', service: 'tanod-gateway', adapters: [...adapters.keys()] });
     return;
   }
 
@@ -115,6 +126,21 @@ async function route(
       result: 'success',
     });
     json(response, 200, { valid: true, claims });
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/v1/executions') {
+    const body = await readJson<ExecutionInput>(request);
+    validateToolCall(body.request);
+    const execution = await executeGovernedToolCall({
+      input: body,
+      policyFile,
+      auditLog,
+      adapters,
+      publicKeyPem: keys.publicKeyPem,
+    });
+    const status = execution.result.status === 'blocked' ? 403 : execution.result.status === 'failure' ? 502 : 200;
+    json(response, status, execution);
     return;
   }
 

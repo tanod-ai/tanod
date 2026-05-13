@@ -23,7 +23,7 @@ Tanod is in early v0.1 development. The current repository contains the first ex
 - Ed25519 signed approval tokens bound to exact tool-call arguments
 - Tamper-evident append-only audit log primitive
 - Example policies and tool-call requests
-- Node test suite for policy, signing, and audit behavior
+- Node test suite for policy, signing, guarded execution, adapters, and audit behavior
 
 The implementation is currently TypeScript/Node.js because this build environment has Node available but not Go. The architecture is intentionally modular so core services can later be split, rewritten, or complemented by Go/Rust components where appropriate.
 
@@ -180,6 +180,55 @@ Response:
 }
 ```
 
+### `POST /v1/executions`
+
+Evaluates and attempts to execute a tool call through Tanod's guarded execution pipeline.
+
+Behavior:
+
+- `deny` → execution is blocked before any adapter is invoked
+- `allow` → the registered adapter executes immediately
+- `require_approval` without token → execution is blocked
+- `require_approval` with valid token → token signature, agent, tool, expiry, and argument hash are verified before adapter execution
+- Tampered arguments after approval are rejected before execution
+
+Request without approval:
+
+```json
+{
+  "request": { "...": "tool call request" }
+}
+```
+
+Request with approval:
+
+```json
+{
+  "request": { "...": "tool call request" },
+  "approval_token": "<compact signed token>"
+}
+```
+
+Response:
+
+```json
+{
+  "request_id": "req_demo_001",
+  "executed": false,
+  "decision": {
+    "decision": "require_approval",
+    "risk_level": "L3",
+    "policy_ids": ["approve-prod-shell-write"],
+    "argument_hash": "sha256:..."
+  },
+  "result": {
+    "status": "blocked",
+    "adapter": "tanod",
+    "error": "Approval token required before execution."
+  }
+}
+```
+
 ### `POST /v1/approvals`
 
 Signs an approval token for an exact tool-call request.
@@ -239,14 +288,54 @@ Supported match operators:
 
 Policy evaluation is first-match by explicit priority, then file order. If no policy matches, Tanod defaults to `deny`.
 
+## Execution adapters
+
+Tanod now includes a small adapter registry used by `/v1/executions`.
+
+### `shell.exec`
+
+Arguments:
+
+```json
+{
+  "command": "systemctl status openclaw-gateway"
+}
+```
+
+Shell execution is **disabled by default**. This is deliberate: Tanod should be safe to run locally and in CI without accidentally becoming a remote command execution service.
+
+Enable it only in a trusted environment:
+
+```bash
+TANOD_ENABLE_SHELL_EXECUTION=true npm start
+```
+
+When disabled, policy and approval logic still run, but the adapter returns `blocked`.
+
+### `http.request`
+
+Arguments:
+
+```json
+{
+  "method": "GET",
+  "url": "https://example.com",
+  "headers": {}
+}
+```
+
+The HTTP adapter supports `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`. Response bodies are capped in the execution result to avoid unbounded audit payloads.
+
 ## Repository layout
 
 ```text
 .
 ├── src/
+│   ├── adapters.ts       # shell/http execution adapters
 │   ├── audit.ts          # hash-chained append-only audit events
 │   ├── canonical.ts      # stable JSON canonicalization and SHA-256 hashing
 │   ├── domain.ts         # core request/decision/token types
+│   ├── execution.ts      # guarded decide/approve/execute pipeline
 │   ├── index.ts          # process entrypoint
 │   ├── policy.ts         # deterministic policy matcher/evaluator
 │   ├── server.ts         # HTTP API
@@ -288,6 +377,9 @@ Defaults:
 - Port: `8787`
 - Policy file: `examples/policies/default.json`
 - Audit file: `.tanod/audit.jsonl`
+- Shell execution: disabled unless `TANOD_ENABLE_SHELL_EXECUTION=true`
+- Shell timeout: `10000` ms
+- HTTP timeout: `10000` ms
 
 Example decision request:
 
@@ -295,6 +387,16 @@ Example decision request:
 curl -sS http://127.0.0.1:8787/v1/decisions \
   -H 'content-type: application/json' \
   --data @examples/requests/shell-write-prod.json | jq
+```
+
+Example guarded execution request:
+
+```bash
+jq -n --slurpfile request examples/requests/shell-write-prod.json \
+  '{request: $request[0]}' \
+  | curl -sS http://127.0.0.1:8787/v1/executions \
+      -H 'content-type: application/json' \
+      --data @- | jq
 ```
 
 ## v0.1 roadmap
@@ -309,9 +411,9 @@ The first release should prove the core idea end-to-end:
 - [x] Verify approval tokens against exact arguments
 - [x] Write hash-chained audit events
 - [ ] Add persistent approval queue
-- [ ] Add execution proxy abstraction
-- [ ] Add shell adapter
-- [ ] Add HTTP adapter
+- [x] Add execution proxy abstraction
+- [x] Add shell adapter
+- [x] Add HTTP adapter
 - [ ] Add `tanodctl` CLI
 - [ ] Add Docker Compose deployment
 - [ ] Add basic web approval console
