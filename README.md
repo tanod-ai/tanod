@@ -415,6 +415,8 @@ Tanod serves a minimal built-in approval console at:
 http://127.0.0.1:8787/console
 ```
 
+By default the server binds to `0.0.0.0`, so you can also reach it from another machine on your LAN using `http://<host-lan-ip>:8787/console`. If you expose Tanod beyond localhost, set `TANOD_API_KEYS`; this API can approve and execute tool calls.
+
 The console lists pending approval requests, displays exact tool arguments and argument hashes, and can approve or reject requests. If `TANOD_API_KEYS` is configured, enter an API key in the console toolbar.
 
 ## Storage
@@ -437,7 +439,7 @@ If `TANOD_DATABASE_URL` is absent, Tanod uses in-memory storage for local develo
 
 ## API authentication
 
-Set comma-separated API keys to require authentication for all non-health endpoints:
+Set comma-separated API keys to require authentication for all non-health endpoints. This is strongly recommended whenever Tanod binds to a LAN-accessible address:
 
 ```bash
 TANOD_API_KEYS=key-one,key-two npm start
@@ -505,7 +507,7 @@ npm start
 
 Defaults:
 
-- Host: `127.0.0.1`
+- Host: `0.0.0.0` (all interfaces; override with `TANOD_HOST=127.0.0.1` for localhost-only)
 - Port: `8787`
 - Policy file: `examples/policies/default.json`
 - Audit file: `.tanod/audit.jsonl`
