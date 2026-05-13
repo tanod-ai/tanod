@@ -417,7 +417,9 @@ http://127.0.0.1:8787/console
 
 By default the server binds to `0.0.0.0`, so you can also reach it from another machine on your LAN using `http://<host-lan-ip>:8787/console`. If you expose Tanod beyond localhost, set `TANOD_API_KEYS`; this API can approve and execute tool calls.
 
-The console lists pending approval requests, displays exact tool arguments and argument hashes, and can approve or reject requests. If `TANOD_API_KEYS` is configured, enter an API key in the console toolbar.
+The console lists approval requests, displays exact tool arguments and argument hashes, and can approve or reject pending requests. Use the status filter to switch between pending, all, approved, rejected, and expired requests. If `TANOD_API_KEYS` is configured, the console page still loads, but API calls require entering an API key in the console toolbar.
+
+A plain `tanod decide` call does not create a persistent approval request. To make an item appear in the console, create one with `tanod request-approval <request.json> --by <user>` or `POST /v1/approval-requests`.
 
 ## Storage
 

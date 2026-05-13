@@ -311,6 +311,7 @@ async function auditDecision(auditLog: AuditLog, toolCall: ToolCallRequest, deci
 function isAuthorized(request: IncomingMessage, apiKeys: string[]): boolean {
   if (apiKeys.length === 0) return true;
   if (request.method === 'GET' && request.url?.startsWith('/healthz')) return true;
+  if (request.method === 'GET' && request.url?.startsWith('/console')) return true;
   const authorization = request.headers.authorization ?? '';
   const bearer = authorization.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : undefined;
   const headerKey = request.headers['x-tanod-api-key'];
