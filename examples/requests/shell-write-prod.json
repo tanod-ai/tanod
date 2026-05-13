@@ -4,7 +4,9 @@
   "timestamp": "2026-05-13T13:30:00Z",
   "actor": {
     "user_id": "ross@example.com",
-    "roles": ["platform_admin"]
+    "roles": [
+      "platform_admin"
+    ]
   },
   "agent": {
     "agent_id": "openclaw-main",
@@ -21,6 +23,12 @@
     "environment": "prod"
   },
   "arguments": {
+    "argv": [
+      "sudo",
+      "systemctl",
+      "restart",
+      "openclaw-gateway"
+    ],
     "command": "sudo systemctl restart openclaw-gateway"
   },
   "context": {

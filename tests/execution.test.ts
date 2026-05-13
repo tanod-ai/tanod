@@ -118,3 +118,23 @@ test('allowed shell command executes when shell adapter is explicitly enabled', 
   assert.equal(response.executed, true);
   assert.equal(response.result.status, 'success');
 });
+
+
+test('shell adapter rejects shell metacharacters even when execution is enabled', async () => {
+  const keys = generateSigningKeyPair();
+  const toolCall = await request('examples/requests/shell-readonly.json');
+  const bypass: ToolCallRequest = { ...toolCall, request_id: 'req_shell_bypass', arguments: { command: 'whoami; touch /tmp/pwned' } };
+  const response = await executeGovernedToolCall({
+    input: { request: bypass },
+    policyFile: {
+      ...policyFile,
+      policies: [{ id: 'allow-test', when: { 'tool.name': { equals: 'shell.exec' } }, then: { decision: 'allow', risk_level: 'L1' } }],
+    },
+    auditLog: await auditLog(),
+    adapters: createAdapterRegistry({ enableShellExecution: true, shellTimeoutMs: 1000, httpTimeoutMs: 1000 }),
+    publicKeyPem: keys.publicKeyPem,
+  });
+  assert.equal(response.executed, false);
+  assert.equal(response.result.status, 'failure');
+  assert.match(response.result.error ?? '', /shell metacharacters/);
+});

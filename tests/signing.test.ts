@@ -106,3 +106,28 @@ test('approval token TTL is bounded', async () => {
     /ttl_seconds must be <= 3600/,
   );
 });
+
+test('approval token rejects changed actor or target even when arguments match', async () => {
+  const keys = generateSigningKeyPair();
+  const toolCall = await request('examples/requests/shell-write-prod.json');
+  const { token } = signApproval(
+    {
+      request: toolCall,
+      approved_by: 'ross@example.com',
+      approved_role: 'platform_owner',
+      policy_id: 'approve-prod-shell-write',
+      risk_level: 'L3',
+      ttl_seconds: 900,
+    },
+    keys.privateKeyPem,
+  );
+
+  assert.throws(
+    () => verifyApprovalToken(token, keys.publicKeyPem, { ...toolCall, actor: { user_id: 'mallory@example.com' } }),
+    /actor does not match/,
+  );
+  assert.throws(
+    () => verifyApprovalToken(token, keys.publicKeyPem, { ...toolCall, target: { ...toolCall.target, system: 'other-host' } }),
+    /target system does not match/,
+  );
+});

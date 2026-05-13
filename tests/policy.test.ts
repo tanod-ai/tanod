@@ -47,3 +47,12 @@ test('requires approval for admin role grants', async () => {
   assert.deepEqual(decision.policy_ids, ['approve-admin-role-grants']);
   assert.deepEqual(decision.approval?.required_roles, ['system_owner', 'security_owner']);
 });
+
+
+test('read-only shell policy does not allow chained shell syntax', async () => {
+  const base = await request('examples/requests/shell-readonly.json');
+  const chained: ToolCallRequest = { ...base, request_id: 'req_chained_shell', arguments: { command: 'ls && touch /tmp/pwned' } };
+  const decision = evaluatePolicy(policyFile, chained);
+  assert.equal(decision.decision, 'deny');
+  assert.deepEqual(decision.policy_ids, []);
+});

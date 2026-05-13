@@ -22,6 +22,7 @@ export interface ServerConfig {
   enableShellExecution: boolean;
   shellTimeoutMs: number;
   httpTimeoutMs: number;
+  allowPrivateNetworkHttp?: boolean;
   apiKeys: string[];
   apiKeyRoles?: Record<string, string[]>;
   apiKeyIdentities?: Record<string, string>;
@@ -53,6 +54,7 @@ export async function startServer(config: ServerConfig): Promise<Server> {
     enableShellExecution: config.enableShellExecution,
     shellTimeoutMs: config.shellTimeoutMs,
     httpTimeoutMs: config.httpTimeoutMs,
+    allowPrivateNetworkHttp: config.allowPrivateNetworkHttp === true,
   });
 
   const server = createServer(async (request, response) => {
@@ -315,6 +317,7 @@ function validateApprover(approvedBy: string | undefined, approvedRole: string |
   validateAuthSubject(approvedBy, auth);
   const requiredRoles = decision.approval?.required_roles ?? [];
   if (requiredRoles.length === 0) return approvedRole;
+  if (auth.key && auth.roles.length === 0) throw new HttpError(403, 'API key has no configured roles; approval-required policies fail closed.');
   if (!approvedRole) throw new HttpError(403, `Approval requires one of these roles: ${requiredRoles.join(', ')}.`);
   if (!requiredRoles.includes(approvedRole)) throw new HttpError(403, `Role ${approvedRole} is not authorized for policy ${decision.policy_ids[0] ?? 'manual'}.`);
   if (auth.roles.length > 0 && !auth.roles.includes(approvedRole)) throw new HttpError(403, `API key is not authorized for role ${approvedRole}.`);

@@ -89,9 +89,16 @@ export interface ApprovalTokenClaims {
   approval_id: string;
   approved_by: string;
   approved_role?: string;
+  request_id: string;
+  actor_id: string;
   agent_id: string;
   tool_name: string;
+  tool_operation?: string;
+  target_system?: string;
+  target_environment?: string;
+  target_resource?: string;
   tool_args_hash: string;
+  tool_call_hash: string;
   risk_level: RiskLevel;
   policy_id: string;
   decision: 'approved';

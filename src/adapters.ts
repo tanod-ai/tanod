@@ -1,4 +1,6 @@
 import { execFile } from 'node:child_process';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import { promisify } from 'node:util';
 import type { ToolCallRequest } from './domain.js';
 
@@ -21,6 +23,7 @@ export interface AdapterConfig {
   enableShellExecution: boolean;
   shellTimeoutMs: number;
   httpTimeoutMs: number;
+  allowPrivateNetworkHttp?: boolean;
 }
 
 export function createAdapterRegistry(config: AdapterConfig): Map<string, ToolAdapter> {
@@ -37,22 +40,20 @@ class ShellExecAdapter implements ToolAdapter {
   constructor(private readonly config: AdapterConfig) {}
 
   async execute(request: ToolCallRequest): Promise<ExecutionResult> {
-    const command = request.arguments.command;
-    if (typeof command !== 'string' || command.trim().length === 0) {
-      return { status: 'failure', adapter: this.name, error: 'shell.exec requires arguments.command string.' };
-    }
+    const command = parseCommand(request.arguments);
+    if (!command.ok) return { status: 'failure', adapter: this.name, error: command.error };
 
     if (!this.config.enableShellExecution) {
       return {
         status: 'blocked',
         adapter: this.name,
         error: 'Shell execution is disabled. Set TANOD_ENABLE_SHELL_EXECUTION=true to enable it for trusted environments.',
-        metadata: { command },
+        metadata: { command: command.display },
       };
     }
 
     try {
-      const result = await execFileAsync('/bin/sh', ['-lc', command], {
+      const result = await execFileAsync(command.file, command.args, {
         timeout: this.config.shellTimeoutMs,
         maxBuffer: 1024 * 1024,
       });
@@ -73,6 +74,94 @@ class ShellExecAdapter implements ToolAdapter {
   }
 }
 
+
+function parseCommand(args: Record<string, unknown>): { ok: true; file: string; args: string[]; display: string } | { ok: false; error: string } {
+  const argv = args.argv;
+  if (argv !== undefined) {
+    if (!Array.isArray(argv) || argv.length === 0 || !argv.every((part) => typeof part === 'string' && part.length > 0)) {
+      return { ok: false, error: 'shell.exec arguments.argv must be a non-empty string array.' };
+    }
+    return { ok: true, file: argv[0], args: argv.slice(1), display: argv.join(' ') };
+  }
+
+  const command = args.command;
+  if (typeof command !== 'string' || command.trim().length === 0) {
+    return { ok: false, error: 'shell.exec requires arguments.argv string[] or arguments.command string.' };
+  }
+  const parsed = parseSimpleCommand(command);
+  if (!parsed.ok) return parsed;
+  return { ok: true, file: parsed.argv[0], args: parsed.argv.slice(1), display: command };
+}
+
+function parseSimpleCommand(command: string): { ok: true; argv: string[] } | { ok: false; error: string } {
+  if (/[;&|`$<>(){}\n\r]/.test(command)) {
+    return { ok: false, error: 'shell.exec command strings may not contain shell metacharacters; use argv for exact executable arguments.' };
+  }
+  const argv: string[] = [];
+  let current = '';
+  let quote: 'single' | 'double' | undefined;
+  for (const ch of command.trim()) {
+    if (ch === "'" && quote !== 'double') {
+      quote = quote === 'single' ? undefined : 'single';
+      continue;
+    }
+    if (ch === '"' && quote !== 'single') {
+      quote = quote === 'double' ? undefined : 'double';
+      continue;
+    }
+    if (/\s/.test(ch) && !quote) {
+      if (current) {
+        argv.push(current);
+        current = '';
+      }
+      continue;
+    }
+    current += ch;
+  }
+  if (quote) return { ok: false, error: 'shell.exec command string has unterminated quote.' };
+  if (current) argv.push(current);
+  if (argv.length === 0) return { ok: false, error: 'shell.exec command string did not contain an executable.' };
+  return { ok: true, argv };
+}
+
+async function validateHttpTarget(parsedUrl: URL, allowPrivateNetwork: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (allowPrivateNetwork) return { ok: true };
+  const hostname = parsedUrl.hostname.toLowerCase();
+  if (hostname === 'localhost' || hostname.endsWith('.localhost')) return { ok: false, error: 'Private HTTP targets are blocked by default.' };
+  const literalKind = isIP(hostname);
+  if (literalKind !== 0) return isPrivateAddress(hostname) ? { ok: false, error: 'Private HTTP targets are blocked by default.' } : { ok: true };
+  try {
+    const addresses = await lookup(hostname, { all: true, verbatim: true });
+    if (addresses.some((entry) => isPrivateAddress(entry.address))) return { ok: false, error: 'Private HTTP targets are blocked by default.' };
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Could not resolve HTTP target.' };
+  }
+}
+
+function isPrivateAddress(address: string): boolean {
+  const kind = isIP(address);
+  if (kind === 4) {
+    const [a, b] = address.split('.').map(Number);
+    return (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 198 && (b === 18 || b === 19)) ||
+      a >= 224
+    );
+  }
+  if (kind === 6) {
+    const normalized = address.toLowerCase();
+    return normalized === '::1' || normalized === '::' || normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80:') || normalized.startsWith('::ffff:127.') || normalized.startsWith('::ffff:10.') || normalized.startsWith('::ffff:192.168.');
+  }
+  return false;
+}
+
 class HttpRequestAdapter implements ToolAdapter {
   readonly name = 'http.request';
 
@@ -90,7 +179,7 @@ class HttpRequestAdapter implements ToolAdapter {
       return { status: 'failure', adapter: this.name, error: `Unsupported HTTP method: ${method}` };
     }
 
-    return executeHttp(this.name, url, method, headers.value, body, this.config.httpTimeoutMs);
+    return executeHttp(this.name, url, method, headers.value, body, this.config.httpTimeoutMs, this.config.allowPrivateNetworkHttp === true);
   }
 }
 
@@ -135,6 +224,7 @@ class McpCallToolAdapter implements ToolAdapter {
       },
       rpcRequest,
       this.config.httpTimeoutMs,
+      this.config.allowPrivateNetworkHttp === true,
     );
 
     if (result.status !== 'success') return result;
@@ -164,6 +254,7 @@ async function executeHttp(
   headers: HeadersInit | undefined,
   body: unknown,
   timeoutMs: number,
+  allowPrivateNetwork: boolean,
 ): Promise<ExecutionResult> {
   let parsedUrl: URL;
   try {
@@ -174,6 +265,8 @@ async function executeHttp(
   if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
     return { status: 'failure', adapter, error: `Unsupported URL protocol: ${parsedUrl.protocol}` };
   }
+  const networkCheck = await validateHttpTarget(parsedUrl, allowPrivateNetwork);
+  if (!networkCheck.ok) return { status: 'blocked', adapter, error: networkCheck.error };
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);

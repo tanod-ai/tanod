@@ -91,6 +91,24 @@ test('approval endpoint rejects roles not granted to the API key', async (t) => 
 
 
 
+
+
+test('approval endpoint fails closed when API key has no configured roles', async (t) => {
+  const base = await withServer(t, { apiKeys: ['noroles-key'], apiKeyRoles: {}, apiKeyIdentities: { 'noroles-key': 'ross@example.com' } });
+  const toolCall = await requestFixture('examples/requests/shell-write-prod.json');
+  const createdResponse = await post(base, '/v1/approval-requests', { request: toolCall, requested_by: 'ross@example.com' }, 'noroles-key');
+  assert.equal(createdResponse.status, 202);
+  const created = await createdResponse.json() as { approval_id: string };
+
+  const response = await post(
+    base,
+    `/v1/approval-requests/${created.approval_id}/approve`,
+    { approved_by: 'ross@example.com', approved_role: 'platform_owner' },
+    'noroles-key',
+  );
+  assert.equal(response.status, 403);
+});
+
 test('approval endpoints enforce API-key-bound approver identity', async (t) => {
   const base = await withServer(t);
   const toolCall = await requestFixture('examples/requests/shell-write-prod.json');

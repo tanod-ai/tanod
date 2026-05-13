@@ -99,7 +99,7 @@
           "equals": "read"
         },
         "arguments.command": {
-          "matches": "^(ls|cat /var/log/|journalctl|systemctl status|df|free|uptime|whoami)(\\s|$)"
+          "matches": "^(ls(\\s+[-A-Za-z0-9_./]+)*|cat\\s+/var/log/[A-Za-z0-9_./-]+|journalctl(\\s+[-A-Za-z0-9_=./]+)*|systemctl\\s+status\\s+[A-Za-z0-9_.@-]+|df(\\s+[-A-Za-z0-9]+)*|free(\\s+[-A-Za-z0-9]+)*|uptime|whoami)$"
         }
       },
       "then": {

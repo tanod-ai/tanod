@@ -27,7 +27,7 @@ Tanod is in early v0.1 development. The current repository contains the first ex
 - Native Go `tanod` CLI for decisions, approvals, execution, and audit verification
 - Dockerfile and Docker Compose deployment with Postgres
 - Standalone React/Vite web console in `apps/console`
-- Optional API-key authentication via `TANOD_API_KEYS`
+- API-key authentication for network exposure via `TANOD_API_KEYS`
 - Example policies and tool-call requests
 - Node test suite for policy, signing, guarded execution, adapters, and audit behavior
 
@@ -344,9 +344,11 @@ Arguments:
 
 ```json
 {
-  "command": "systemctl status openclaw-gateway"
+  "argv": ["systemctl", "status", "openclaw-gateway"]
 }
 ```
+
+For compatibility, `command` strings are accepted only as simple executable-plus-arguments strings. Tanod does **not** execute them through a shell; shell metacharacters such as `;`, `&&`, pipes, redirection, command substitution, and newlines are rejected. Prefer `argv` for exact execution semantics.
 
 Shell execution is **disabled by default**. This is deliberate: Tanod should be safe to run locally and in CI without accidentally becoming a remote command execution service.
 
@@ -370,7 +372,7 @@ Arguments:
 }
 ```
 
-The HTTP adapter supports `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`. Response bodies are capped in the execution result to avoid unbounded audit payloads.
+The HTTP adapter supports `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`. Response bodies are capped in the execution result to avoid unbounded audit payloads. Private and loopback network targets are blocked by default to reduce SSRF risk; set `TANOD_ALLOW_PRIVATE_NETWORK_HTTP=true` only for isolated development or explicitly trusted internal MCP/HTTP targets.
 
 ### `mcp.call_tool`
 
@@ -414,7 +416,7 @@ The web console is a standalone React/Vite application in `apps/console`. It is 
 Run the gateway in one terminal:
 
 ```bash
-TANOD_API_KEYS=dev-key TANOD_API_KEY_ROLES=dev-key:platform_owner TANOD_API_KEY_IDENTITIES=dev-key:ross@example.com npm run dev
+TANOD_HOST=0.0.0.0 TANOD_API_KEYS=dev-key TANOD_API_KEY_ROLES=dev-key:platform_owner TANOD_API_KEY_IDENTITIES=dev-key:ross@example.com npm run dev
 ```
 
 Run the console in another terminal:
@@ -530,18 +532,19 @@ npm start
 
 Defaults:
 
-- Host: `0.0.0.0` (all interfaces; override with `TANOD_HOST=127.0.0.1` for localhost-only)
+- Host: `127.0.0.1` (loopback only; set `TANOD_HOST=0.0.0.0` for LAN/server use)
 - Port: `8787`
 - Policy file: `examples/policies/default.json`
 - Audit file: `.tanod/audit.jsonl`
 - Postgres URL: optional `TANOD_DATABASE_URL`
-- API keys: optional `TANOD_API_KEYS`
+- API keys: required for non-loopback binds unless `TANOD_ALLOW_UNAUTHENTICATED=true` is explicitly set
 - API key roles: optional `TANOD_API_KEY_ROLES` as `key:role,role;other-key:role`
 - API key identities: optional `TANOD_API_KEY_IDENTITIES` as `key:user@example.com;other-key:user2@example.com`
 - Request bodies: limited to 1 MiB
 - Shell execution: disabled unless `TANOD_ENABLE_SHELL_EXECUTION=true`
 - Shell timeout: `10000` ms
 - HTTP timeout: `10000` ms
+- Private HTTP targets: blocked unless `TANOD_ALLOW_PRIVATE_NETWORK_HTTP=true`
 
 Example decision request:
 
@@ -585,16 +588,16 @@ mkdir -p bin
 (cd cli && go build -o ../bin/tanod ./cmd/tanod)
 ```
 
-Start Tanod in one terminal. For unauthenticated local-only testing:
+Start Tanod in one terminal. For unauthenticated local-only testing, root `npm run dev` binds to loopback by default:
 
 ```bash
-TANOD_HOST=127.0.0.1 npm run dev
+npm run dev
 ```
 
-For LAN testing or anything beyond localhost, use an API key:
+For LAN testing or anything beyond localhost, bind explicitly and use an API key:
 
 ```bash
-TANOD_API_KEYS=dev-key TANOD_API_KEY_ROLES=dev-key:platform_owner TANOD_API_KEY_IDENTITIES=dev-key:ross@example.com npm run dev
+TANOD_HOST=0.0.0.0 TANOD_API_KEYS=dev-key TANOD_API_KEY_ROLES=dev-key:platform_owner TANOD_API_KEY_IDENTITIES=dev-key:ross@example.com npm run dev
 ```
 
 In another terminal, point the CLI at the running gateway:

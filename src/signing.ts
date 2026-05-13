@@ -1,6 +1,6 @@
 import { createPrivateKey, createPublicKey, generateKeyPairSync, sign, verify } from 'node:crypto';
 import { randomUUID } from 'node:crypto';
-import { hashArguments } from './canonical.js';
+import { canonicalize, hashArguments, sha256Hex } from './canonical.js';
 import type { ApprovalTokenClaims, RiskLevel, ToolCallRequest } from './domain.js';
 
 export interface KeyPairPem {
@@ -44,9 +44,16 @@ export function signApproval(input: ApprovalInput, privateKeyPem: string): { tok
     approval_id: input.approval_id ?? `appr_${randomUUID()}`,
     approved_by: input.approved_by,
     approved_role: input.approved_role,
+    request_id: input.request.request_id,
+    actor_id: input.request.actor.user_id,
     agent_id: input.request.agent.agent_id,
     tool_name: input.request.tool.name,
+    tool_operation: input.request.tool.operation,
+    target_system: input.request.target?.system,
+    target_environment: input.request.target?.environment,
+    target_resource: input.request.target?.resource,
     tool_args_hash: hashArguments(input.request.arguments),
+    tool_call_hash: hashToolCall(input.request),
     risk_level: input.risk_level,
     policy_id: input.policy_id,
     decision: 'approved',
@@ -86,9 +93,16 @@ export function verifyApprovalToken(
   if (claims.exp <= nowSeconds) throw new Error('Approval token has expired.');
   if (request) {
     const actualHash = hashArguments(request.arguments);
+    if (claims.request_id !== request.request_id) throw new Error('Approval token request_id does not match request.');
+    if (claims.actor_id !== request.actor.user_id) throw new Error('Approval token actor does not match request.');
     if (claims.agent_id !== request.agent.agent_id) throw new Error('Approval token agent does not match request.');
     if (claims.tool_name !== request.tool.name) throw new Error('Approval token tool does not match request.');
+    if (claims.tool_operation !== request.tool.operation) throw new Error('Approval token tool operation does not match request.');
+    if (claims.target_system !== request.target?.system) throw new Error('Approval token target system does not match request.');
+    if (claims.target_environment !== request.target?.environment) throw new Error('Approval token target environment does not match request.');
+    if (claims.target_resource !== request.target?.resource) throw new Error('Approval token target resource does not match request.');
     if (claims.tool_args_hash !== actualHash) throw new Error('Approval token argument hash does not match request.');
+    if (claims.tool_call_hash !== hashToolCall(request)) throw new Error('Approval token full action hash does not match request.');
   }
   if (requirements.policy_id && claims.policy_id !== requirements.policy_id) {
     throw new Error('Approval token policy does not match required policy.');
@@ -105,6 +119,10 @@ export function normalizeApprovalTtl(ttlSeconds: number | undefined, maxSeconds 
   if (!Number.isInteger(ttl) || ttl < 1) throw new Error('Approval token ttl_seconds must be a positive integer.');
   if (ttl > maxSeconds) throw new Error(`Approval token ttl_seconds must be <= ${maxSeconds}.`);
   return ttl;
+}
+
+export function hashToolCall(request: ToolCallRequest): string {
+  return `sha256:${sha256Hex(canonicalize(request))}`;
 }
 
 function base64urlJson(value: unknown): string {

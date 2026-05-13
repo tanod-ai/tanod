@@ -34,7 +34,7 @@ test('mcp.call_tool sends MCP tools/call JSON-RPC request', async () => {
       },
     };
 
-    const adapter = createAdapterRegistry({ enableShellExecution: false, shellTimeoutMs: 1000, httpTimeoutMs: 1000 }).get('mcp.call_tool');
+    const adapter = createAdapterRegistry({ enableShellExecution: false, shellTimeoutMs: 1000, httpTimeoutMs: 1000, allowPrivateNetworkHttp: true }).get('mcp.call_tool');
     assert.ok(adapter);
     const result = await adapter.execute(request);
     assert.equal(result.status, 'success');
@@ -73,7 +73,7 @@ test('mcp.call_tool reports JSON-RPC errors as failures', async () => {
       arguments: { server_url: `http://127.0.0.1:${port}/mcp`, tool_name: 'missing', tool_arguments: {} },
     };
 
-    const adapter = createAdapterRegistry({ enableShellExecution: false, shellTimeoutMs: 1000, httpTimeoutMs: 1000 }).get('mcp.call_tool');
+    const adapter = createAdapterRegistry({ enableShellExecution: false, shellTimeoutMs: 1000, httpTimeoutMs: 1000, allowPrivateNetworkHttp: true }).get('mcp.call_tool');
     assert.ok(adapter);
     const result = await adapter.execute(request);
     assert.equal(result.status, 'failure');
@@ -84,7 +84,7 @@ test('mcp.call_tool reports JSON-RPC errors as failures', async () => {
 });
 
 test('adapters return structured failures for malformed headers', async () => {
-  const adapter = createAdapterRegistry({ enableShellExecution: false, shellTimeoutMs: 1000, httpTimeoutMs: 1000 }).get('mcp.call_tool');
+  const adapter = createAdapterRegistry({ enableShellExecution: false, shellTimeoutMs: 1000, httpTimeoutMs: 1000, allowPrivateNetworkHttp: true }).get('mcp.call_tool');
   assert.ok(adapter);
   const request: ToolCallRequest = {
     version: 'v1',
@@ -98,4 +98,22 @@ test('adapters return structured failures for malformed headers', async () => {
   const result = await adapter.execute(request);
   assert.equal(result.status, 'failure');
   assert.match(result.error ?? '', /headers must be an object/);
+});
+
+
+test('http.request blocks private network targets by default', async () => {
+  const adapter = createAdapterRegistry({ enableShellExecution: false, shellTimeoutMs: 1000, httpTimeoutMs: 1000 }).get('http.request');
+  assert.ok(adapter);
+  const request: ToolCallRequest = {
+    version: 'v1',
+    request_id: 'req_private_http',
+    actor: { user_id: 'ross@example.com' },
+    agent: { agent_id: 'dev-agent', environment: 'dev' },
+    tool: { name: 'http.request', category: 'network', operation: 'read' },
+    target: { system: 'localhost', environment: 'public' },
+    arguments: { method: 'GET', url: 'http://127.0.0.1:1/' },
+  };
+  const result = await adapter.execute(request);
+  assert.equal(result.status, 'blocked');
+  assert.match(result.error ?? '', /Private HTTP targets are blocked/);
 });
