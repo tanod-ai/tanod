@@ -372,6 +372,41 @@ Arguments:
 
 The HTTP adapter supports `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`. Response bodies are capped in the execution result to avoid unbounded audit payloads.
 
+### `mcp.call_tool`
+
+Calls a tool exposed by an MCP server through Tanod's guarded execution path. The current adapter supports HTTP/streamable JSON-RPC style MCP endpoints and sends the MCP `tools/call` method. Stdio MCP support is planned separately because it requires process/session lifecycle management.
+
+Arguments:
+
+```json
+{
+  "server_url": "http://127.0.0.1:3000/mcp",
+  "tool_name": "echo",
+  "tool_arguments": {
+    "message": "hello from tanod"
+  },
+  "headers": {}
+}
+```
+
+Tanod sends:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "req_demo_mcp_call_tool",
+  "method": "tools/call",
+  "params": {
+    "name": "echo",
+    "arguments": {
+      "message": "hello from tanod"
+    }
+  }
+}
+```
+
+Policy still decides whether the MCP tool call is allowed, denied, or requires signed approval before Tanod contacts the MCP server.
+
 ## Approval console
 
 Tanod serves a minimal built-in approval console at:
@@ -425,7 +460,7 @@ x-tanod-api-key: key-one
 ```text
 .
 ├── src/
-│   ├── adapters.ts       # shell/http execution adapters
+│   ├── adapters.ts       # shell/http/MCP execution adapters
 │   ├── audit.ts          # hash-chained append-only audit events
 │   ├── canonical.ts      # stable JSON canonicalization and SHA-256 hashing
 │   ├── domain.ts         # core request/decision/token types
@@ -526,6 +561,7 @@ The first release should prove the core idea end-to-end:
 - [x] Add execution proxy abstraction
 - [x] Add shell adapter
 - [x] Add HTTP adapter
+- [x] Add MCP adapter
 - [x] Add `tanod` CLI
 - [x] Add Docker Compose deployment
 - [x] Add basic web approval console

@@ -134,6 +134,33 @@
           "severity": "low"
         }
       }
+    },
+    {
+      "id": "allow-dev-mcp-tool-call",
+      "description": "Allow MCP tool calls from development agents to development MCP servers.",
+      "priority": 85,
+      "when": {
+        "tool.name": {
+          "equals": "mcp.call_tool"
+        },
+        "tool.operation": {
+          "equals": "execute"
+        },
+        "agent.environment": {
+          "equals": "dev"
+        },
+        "target.environment": {
+          "equals": "dev"
+        }
+      },
+      "then": {
+        "decision": "allow",
+        "risk_level": "L2",
+        "message": "Development MCP tool call allowed.",
+        "audit": {
+          "severity": "medium"
+        }
+      }
     }
   ]
 }
