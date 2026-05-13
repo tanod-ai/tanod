@@ -14,6 +14,7 @@ export interface TanodPluginConfig {
   createApprovalRequests: boolean;
   approvalRequestedBy: string;
   approvalTimeoutMs: number;
+  approvalPollIntervalMs: number;
   approvalTimeoutBehavior: 'allow' | 'deny';
   approvalRole?: string;
   failClosed: boolean;
@@ -70,9 +71,15 @@ export interface TanodExecutionResponse {
 export interface TanodApprovalRequestResponse {
   approval_id: string;
   request_id: string;
-  status: string;
+  status: 'pending' | 'approved' | 'rejected' | 'expired' | string;
+  approval_token?: string;
+  rejection_reason?: string;
   [key: string]: unknown;
 }
+
+export type TanodApprovalWaitResult =
+  | { status: 'approved'; approval: TanodApprovalRequestResponse; approvalToken: string }
+  | { status: 'rejected' | 'expired' | 'timeout'; approval?: TanodApprovalRequestResponse; reason: string };
 
 export const DEFAULT_CONFIG: TanodPluginConfig = {
   mode: 'gate_only',
@@ -87,6 +94,7 @@ export const DEFAULT_CONFIG: TanodPluginConfig = {
   createApprovalRequests: true,
   approvalRequestedBy: 'openclaw',
   approvalTimeoutMs: 600_000,
+  approvalPollIntervalMs: 2_000,
   approvalTimeoutBehavior: 'deny',
   failClosed: true,
 };
@@ -109,6 +117,7 @@ export function normalizeConfig(raw: unknown, env: Record<string, string | undef
     createApprovalRequests: booleanValue(value.createApprovalRequests, DEFAULT_CONFIG.createApprovalRequests),
     approvalRequestedBy: stringValue(value.approvalRequestedBy, DEFAULT_CONFIG.approvalRequestedBy),
     approvalTimeoutMs: numberValue(value.approvalTimeoutMs, DEFAULT_CONFIG.approvalTimeoutMs),
+    approvalPollIntervalMs: numberValue(value.approvalPollIntervalMs, DEFAULT_CONFIG.approvalPollIntervalMs),
     approvalTimeoutBehavior: value.approvalTimeoutBehavior === 'allow' ? 'allow' : 'deny',
     approvalRole: optionalString(value.approvalRole),
     failClosed: booleanValue(value.failClosed, DEFAULT_CONFIG.failClosed),
@@ -190,17 +199,33 @@ export class TanodClient {
 
   async createApprovalRequest(request: TanodToolCallRequest): Promise<TanodApprovalRequestResponse | undefined> {
     try {
-      return await this.post<TanodApprovalRequestResponse>('/v1/approval-requests', { request, requested_by: this.config.approvalRequestedBy }, [202, 409]);
+      return await this.post<TanodApprovalRequestResponse>('/v1/approval-requests', { request, requested_by: this.config.approvalRequestedBy }, [202]);
     } catch (error) {
       if (!this.config.failClosed) return undefined;
       throw error;
     }
   }
 
+  async getApprovalRequest(approvalId: string): Promise<TanodApprovalRequestResponse> {
+    return this.get<TanodApprovalRequestResponse>(`/v1/approval-requests/${encodeURIComponent(approvalId)}`, [200]);
+  }
+
+  async verifyApproval(request: TanodToolCallRequest, approvalToken: string): Promise<unknown> {
+    return this.post('/v1/approval-verifications', { request, approval_token: approvalToken }, [200]);
+  }
+
   private async post<T>(path: string, body: unknown, okStatuses: number[]): Promise<T> {
+    return this.request<T>(path, { method: 'POST', body: JSON.stringify(body) }, okStatuses);
+  }
+
+  private async get<T>(path: string, okStatuses: number[]): Promise<T> {
+    return this.request<T>(path, { method: 'GET' }, okStatuses);
+  }
+
+  private async request<T>(path: string, init: RequestInit, okStatuses: number[]): Promise<T> {
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     if (this.config.apiKey) headers.authorization = `Bearer ${this.config.apiKey}`;
-    const response = await fetch(`${this.config.tanodUrl}${path}`, { method: 'POST', headers, body: JSON.stringify(body) });
+    const response = await fetch(`${this.config.tanodUrl}${path}`, { ...init, headers: { ...headers, ...(init.headers ?? {}) } });
     const text = await response.text();
     const parsed = text ? JSON.parse(text) as unknown : {};
     if (!okStatuses.includes(response.status)) {
@@ -211,13 +236,36 @@ export class TanodClient {
   }
 }
 
-export function formatExecutionContent(execution: TanodExecutionResponse, approval?: TanodApprovalRequestResponse): string {
+export async function waitForTanodApproval(client: TanodClient, approvalId: string, config: TanodPluginConfig): Promise<TanodApprovalWaitResult> {
+  const deadline = Date.now() + config.approvalTimeoutMs;
+  let last: TanodApprovalRequestResponse | undefined;
+  while (Date.now() <= deadline) {
+    last = await client.getApprovalRequest(approvalId);
+    if (last.status === 'approved') {
+      if (!last.approval_token) return { status: 'rejected', approval: last, reason: 'Tanod approval was approved but did not include an approval token.' };
+      return { status: 'approved', approval: last, approvalToken: last.approval_token };
+    }
+    if (last.status === 'rejected') return { status: 'rejected', approval: last, reason: last.rejection_reason ?? 'Tanod approval was rejected.' };
+    if (last.status === 'expired') return { status: 'expired', approval: last, reason: 'Tanod approval expired.' };
+    await sleep(Math.min(config.approvalPollIntervalMs, Math.max(0, deadline - Date.now())));
+  }
+  return { status: 'timeout', approval: last, reason: `Timed out waiting for Tanod approval ${approvalId}.` };
+}
+
+export function formatExecutionContent(execution: TanodExecutionResponse, approval?: TanodApprovalRequestResponse | TanodApprovalWaitResult): string {
   if (execution.executed) return JSON.stringify(execution.result.output ?? execution.result, null, 2);
   if (execution.decision.decision === 'require_approval') {
-    const approvalLine = approval?.approval_id ? ` Approval request: ${approval.approval_id}.` : '';
+    const approvalRecord = approvalRecordFrom(approval);
+    const approvalLine = approvalRecord?.approval_id ? ` Approval request: ${approvalRecord.approval_id}.` : '';
     return `Tanod blocked execution until approval is granted.${approvalLine} ${execution.result.error ?? execution.decision.message}`.trim();
   }
   return `Tanod ${execution.decision.decision}: ${execution.result.error ?? execution.decision.message}`;
+}
+
+function approvalRecordFrom(approval: TanodApprovalRequestResponse | TanodApprovalWaitResult | undefined): TanodApprovalRequestResponse | undefined {
+  if (!approval) return undefined;
+  if ('approval_id' in approval) return approval;
+  return approval.approval;
 }
 
 function governedRequest(toolName: string, category: string, operation: string, args: Record<string, unknown>, params: Record<string, unknown>, config: TanodPluginConfig): TanodToolCallRequest {
@@ -277,4 +325,8 @@ function stringFrom(value: unknown): string | undefined {
 
 function safeId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_.:-]/g, '_').slice(0, 160);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

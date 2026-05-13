@@ -74,7 +74,15 @@
         "type": "integer",
         "minimum": 1000,
         "maximum": 600000,
-        "default": 600000
+        "default": 600000,
+        "description": "Maximum time to wait for Tanod approval polling before denying."
+      },
+      "approvalPollIntervalMs": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 60000,
+        "default": 2000,
+        "description": "Polling interval while waiting for a Tanod approval request to be approved or rejected."
       },
       "approvalTimeoutBehavior": {
         "type": "string",

@@ -148,6 +148,34 @@ test('direct approval signing derives policy id and caps TTL from policy', async
   assert.equal(verified.claims.policy_id, 'approve-prod-shell-write');
 });
 
+
+test('approval request lookup exposes approved token for polling clients', async (t) => {
+  const base = await withServer(t);
+  const toolCall = await requestFixture('examples/requests/shell-write-prod.json');
+  const createdResponse = await post(base, '/v1/approval-requests', { request: toolCall, requested_by: 'ross@example.com' });
+  assert.equal(createdResponse.status, 202);
+  const created = await createdResponse.json() as { approval_id: string };
+
+  const pendingResponse = await fetch(`${base}/v1/approval-requests/${created.approval_id}`, {
+    headers: { authorization: 'Bearer dev-key' },
+  });
+  assert.equal(pendingResponse.status, 200);
+  const pending = await pendingResponse.json() as { status: string; approval_token?: string };
+  assert.equal(pending.status, 'pending');
+  assert.equal(pending.approval_token, undefined);
+
+  const approvedResponse = await post(base, `/v1/approval-requests/${created.approval_id}/approve`, { approved_by: 'ross@example.com', approved_role: 'platform_owner' });
+  assert.equal(approvedResponse.status, 200);
+
+  const lookupResponse = await fetch(`${base}/v1/approval-requests/${created.approval_id}`, {
+    headers: { authorization: 'Bearer dev-key' },
+  });
+  assert.equal(lookupResponse.status, 200);
+  const approved = await lookupResponse.json() as { status: string; approval_token?: string };
+  assert.equal(approved.status, 'approved');
+  assert.equal(typeof approved.approval_token, 'string');
+});
+
 test('rejecting a finalized approval returns conflict', async (t) => {
   const base = await withServer(t);
   const toolCall = await requestFixture('examples/requests/shell-write-prod.json');

@@ -4,8 +4,8 @@ This plugin injects Tanod into OpenClaw's tool execution path.
 
 It supports two modes:
 
-1. **Gate-only mode** (`gate_only`) — intercepts existing OpenClaw tool calls with the `before_tool_call` plugin hook, asks Tanod for a policy decision, blocks denies, and uses OpenClaw's approval pause for approval-required calls.
-2. **Governed replacement mode** (`governed_replacement`) — registers Tanod-backed replacement tools and, by default, blocks configured raw dangerous OpenClaw tools so the model must use governed tools.
+1. **Gate-only mode** (`gate_only`) — intercepts existing OpenClaw tool calls with the `before_tool_call` plugin hook, asks Tanod for a policy decision, blocks denies, and polls Tanod approval requests for approval-required calls. It does not use OpenClaw `/approve` as an authorization source.
+2. **Governed replacement mode** (`governed_replacement`) — registers Tanod-backed replacement tools and, by default, blocks configured raw dangerous OpenClaw tools so the model must use governed tools. Approval-required calls wait for a Tanod-signed approval token, then retry Tanod `/v1/executions`.
 
 ## Mode 1: gate-only
 
@@ -37,7 +37,7 @@ Flow:
 LLM tool call JSON → OpenClaw parses tool call → Tanod before_tool_call gate → existing OpenClaw tool executor
 ```
 
-This mode is useful for rollout and observation. Tanod sees and audits decisions before raw OpenClaw tools run, but OpenClaw still owns final execution.
+This mode is useful for rollout and observation. Tanod is the approval source of truth: approval-required calls create a Tanod approval request and poll Tanod until approved, rejected, expired, or timed out. OpenClaw `/approve` does not resume these calls. After Tanod approval is verified, OpenClaw still owns final raw-tool execution, so this mode is weaker than governed replacement.
 
 ## Mode 2: governed replacement
 
@@ -80,7 +80,7 @@ Flow:
 LLM → tanod_* tool → POST /v1/executions → Tanod policy/approval/signature/audit → Tanod adapter executes
 ```
 
-If Tanod returns `require_approval` and no `approvalToken` is supplied, the plugin creates a Tanod approval request when `createApprovalRequests` is enabled and returns the approval id in the tool result. Approve it from the Tanod console or CLI, then retry with the signed approval token.
+If Tanod returns `require_approval` and no `approvalToken` is supplied, the plugin creates a Tanod approval request when `createApprovalRequests` is enabled, polls Tanod for completion, then retries `/v1/executions` with the signed approval token. Approve from the Tanod console or CLI; OpenClaw `/approve` is intentionally not used to authorize governed replacement execution.
 
 ## Config
 
@@ -98,13 +98,14 @@ If Tanod returns `require_approval` and no `approvalToken` is supplied, the plug
 | `blockRawProtectedToolsInGovernedMode` | `true` | Blocks raw protected tools so agents use Tanod replacement tools. |
 | `createApprovalRequests` | `true` | Creates Tanod approval requests when a decision requires approval. |
 | `approvalRequestedBy` | `openclaw` | `requested_by` for Tanod approval requests. |
-| `approvalTimeoutMs` | `600000` | OpenClaw plugin approval timeout in gate-only mode. |
-| `approvalTimeoutBehavior` | `deny` | OpenClaw plugin approval timeout behavior. |
+| `approvalTimeoutMs` | `600000` | Maximum time to wait for Tanod approval before denying. |
+| `approvalPollIntervalMs` | `2000` | Poll interval while waiting for Tanod approval status. |
+| `approvalTimeoutBehavior` | `deny` | Legacy config; Tanod approval polling fails closed on timeout. |
 | `failClosed` | `true` | Block protected tools when Tanod is unavailable. |
 
 ## Security notes
 
-- Gate-only mode is a rollout bridge, not the strongest enforcement model. OpenClaw still executes the original tool after approval.
-- Governed replacement mode is stronger because Tanod owns policy, approval verification, execution, and audit.
+- Gate-only mode is a rollout bridge, not the strongest enforcement model. Tanod approval is required, but OpenClaw still executes the original tool after approval verification.
+- Governed replacement mode is stronger because Tanod owns policy, approval verification, execution, and audit. OpenClaw `/approve` cannot substitute for a Tanod-signed approval token.
 - For serious use, deny raw dangerous OpenClaw tools and allow only `tanod_*` replacements.
 - Keep the Tanod API key in environment/config secrets, not prompt-visible context.

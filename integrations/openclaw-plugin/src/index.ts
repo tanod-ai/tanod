@@ -8,6 +8,7 @@ import {
   mapGovernedMcpParams,
   mapOpenClawToolCallToTanod,
   normalizeConfig,
+  waitForTanodApproval,
   type OpenClawToolEvent,
   type TanodPluginConfig,
   type TanodToolCallRequest,
@@ -24,7 +25,7 @@ export default definePluginEntry({
     api.on(
       'before_tool_call',
       async (event: OpenClawToolEvent) => beforeToolCall(event, pluginConfig),
-      { priority: 10_000, timeoutMs: 30_000 },
+      { priority: 10_000, timeoutMs: 600_000 },
     );
 
     api.registerTool(
@@ -119,17 +120,15 @@ async function beforeToolCall(event: OpenClawToolEvent, pluginConfig?: unknown):
       return { block: true, blockReason: decision.message || 'Blocked by Tanod policy.' };
     }
 
-    const approval = config.createApprovalRequests ? await client.createApprovalRequest(request) : undefined;
-    return {
-      requireApproval: {
-        title: `Tanod approval required: ${event.toolName}`,
-        description: `${decision.message}${approval?.approval_id ? `\n\nTanod approval request: ${approval.approval_id}` : ''}`,
-        severity: severityForRisk(decision.risk_level),
-        timeoutMs: config.approvalTimeoutMs,
-        timeoutBehavior: config.approvalTimeoutBehavior,
-        pluginId: 'tanod',
-      },
-    };
+    if (!config.createApprovalRequests) {
+      return { block: true, blockReason: `${decision.message} Tanod approval is required, but approval request creation is disabled.` };
+    }
+    const approval = await client.createApprovalRequest(request);
+    if (!approval?.approval_id) return { block: true, blockReason: 'Tanod approval is required, but no approval request was created.' };
+    const waited = await waitForTanodApproval(client, approval.approval_id, config);
+    if (waited.status !== 'approved') return { block: true, blockReason: waited.reason };
+    await client.verifyApproval(request, waited.approvalToken);
+    return undefined;
   } catch (error) {
     if (config.failClosed) {
       return { block: true, blockReason: `Tanod unavailable or rejected request: ${error instanceof Error ? error.message : 'unknown error'}` };
@@ -143,8 +142,22 @@ async function governedToolResult(request: TanodToolCallRequest, params: Record<
   const client = new TanodClient(config);
   const approvalToken = typeof params.approvalToken === 'string' ? params.approvalToken : undefined;
   const execution = await client.execute(request, approvalToken);
-  const approval = !execution.executed && execution.decision.decision === 'require_approval' && config.createApprovalRequests ? await client.createApprovalRequest(request) : undefined;
-  return { content: [{ type: 'text', text: `${TOOL_RESULT_PREFIX} ${formatExecutionContent(execution, approval)}` }] };
+  if (execution.executed || execution.decision.decision !== 'require_approval') {
+    return { content: [{ type: 'text', text: `${TOOL_RESULT_PREFIX} ${formatExecutionContent(execution)}` }] };
+  }
+  if (!config.createApprovalRequests) {
+    return { content: [{ type: 'text', text: `${TOOL_RESULT_PREFIX} ${formatExecutionContent(execution)} Approval request creation is disabled.` }] };
+  }
+  const approval = await client.createApprovalRequest(request);
+  if (!approval?.approval_id) {
+    return { content: [{ type: 'text', text: `${TOOL_RESULT_PREFIX} ${formatExecutionContent(execution)} No approval request was created.` }] };
+  }
+  const waited = await waitForTanodApproval(client, approval.approval_id, config);
+  if (waited.status !== 'approved') {
+    return { content: [{ type: 'text', text: `${TOOL_RESULT_PREFIX} ${waited.reason}` }] };
+  }
+  const approvedExecution = await client.execute(request, waited.approvalToken);
+  return { content: [{ type: 'text', text: `${TOOL_RESULT_PREFIX} ${formatExecutionContent(approvedExecution, waited)}` }] };
 }
 
 function configFromEvent(event: OpenClawToolEvent, pluginConfig?: unknown): TanodPluginConfig {

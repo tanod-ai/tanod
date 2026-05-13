@@ -10,6 +10,7 @@ import {
   mapGovernedMcpParams,
   mapOpenClawToolCallToTanod,
   normalizeConfig,
+  waitForTanodApproval,
 } from '../src/tanod.js';
 
 test('normalizes plugin config with environment API key fallback', () => {
@@ -89,4 +90,32 @@ test('formats approval-required execution result with approval id', () => {
   );
   assert.match(text, /approval is granted/);
   assert.match(text, /appr_123/);
+});
+
+
+test('waits for Tanod approval polling until approval token is available', async () => {
+  let polls = 0;
+  const server = createServer((_request, response) => {
+    polls += 1;
+    response.setHeader('content-type', 'application/json');
+    response.end(
+      JSON.stringify(
+        polls < 2
+          ? { approval_id: 'appr_1', request_id: 'req_1', status: 'pending' }
+          : { approval_id: 'appr_1', request_id: 'req_1', status: 'approved', approval_token: 'signed-token' },
+      ),
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    assert.equal(typeof address, 'object');
+    const config = normalizeConfig({ tanodUrl: `http://127.0.0.1:${(address as { port: number }).port}`, approvalTimeoutMs: 1000, approvalPollIntervalMs: 10 });
+    const waited = await waitForTanodApproval(new TanodClient(config), 'appr_1', config);
+    assert.equal(waited.status, 'approved');
+    assert.equal(waited.status === 'approved' ? waited.approvalToken : '', 'signed-token');
+    assert.equal(polls, 2);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
 });

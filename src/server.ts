@@ -193,6 +193,15 @@ async function route(
     return;
   }
 
+  const approvalGetMatch = method === 'GET' ? url.pathname.match(/^\/v1\/approval-requests\/([^/]+)$/) : null;
+  if (approvalGetMatch) {
+    const approvalId = decodeURIComponent(approvalGetMatch[1]);
+    const record = await storage.getApprovalRequest(approvalId);
+    if (!record) throw new HttpError(404, `Approval request not found: ${approvalId}`);
+    json(response, 200, record);
+    return;
+  }
+
   const approvalApproveMatch = method === 'POST' ? url.pathname.match(/^\/v1\/approval-requests\/([^/]+)\/approve$/) : null;
   if (approvalApproveMatch) {
     const approvalId = decodeURIComponent(approvalApproveMatch[1]);
