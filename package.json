@@ -1,0 +1,25 @@
+{
+  "name": "tanod",
+  "version": "0.1.0-alpha.0",
+  "description": "Open-source signed execution control for AI agents.",
+  "type": "module",
+  "private": false,
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/index.js",
+    "dev": "node --loader ts-node/esm src/index.ts",
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "check": "npm run build && npm test"
+  },
+  "bin": {
+    "tanod": "dist/src/index.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.18",
+    "typescript": "^5.8.3"
+  }
+}
