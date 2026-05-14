@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   vars:
@@ -70,7 +72,15 @@ jobs:
         if: ${{ env.DOCKERHUB_TOKEN != '' }}
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: true
+          sbom: true
+          provenance: mode=max
+          labels: |
+            org.opencontainers.image.source=https://github.com/tanod-ai/tanod
+            org.opencontainers.image.description=Tanod Agentic AI Security Gateway
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.version=${{ needs.vars.outputs.tag }}
           tags: |
             ${{ needs.vars.outputs.image }}:${{ needs.vars.outputs.tag }}
             ${{ needs.vars.outputs.image }}:latest
