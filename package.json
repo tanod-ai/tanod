@@ -1,6 +1,6 @@
 {
-  "name": "tanod",
-  "version": "0.1.0-alpha.0",
+  "name": "tanod-ai",
+  "version": "0.1.0-alpha.2",
   "description": "Open-source signed execution control for AI agents.",
   "type": "module",
   "private": false,

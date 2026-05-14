@@ -574,7 +574,7 @@ x-tanod-api-key: key-one
 
 ## Local Docker install for macOS and Linux
 
-Tanod publishes deployable release artifacts through GitHub Actions. The installer does not require a source checkout, Node, or Go: it downloads the matching prebuilt CLI + Compose bundle from GitHub Releases and runs the gateway from the published GHCR image.
+Tanod publishes deployable release artifacts through GitHub Actions. The installer does not require a source checkout, Node, or Go: it downloads the matching prebuilt CLI + Compose bundle from GitHub Releases and runs the gateway from the published Docker Hub image.
 
 Install latest release:
 
@@ -597,10 +597,10 @@ scripts/install.sh
 
 Release assets:
 
-- `tanod_linux_amd64.tar.gz`
-- `tanod_linux_arm64.tar.gz`
-- `tanod_darwin_amd64.tar.gz`
-- `tanod_darwin_arm64.tar.gz`
+- `tanod-ai_linux_amd64.tar.gz`
+- `tanod-ai_linux_arm64.tar.gz`
+- `tanod-ai_darwin_amd64.tar.gz`
+- `tanod-ai_darwin_arm64.tar.gz`
 - `install.sh`
 - `checksums.txt`
 
@@ -610,7 +610,7 @@ Defaults:
 - State/config: `~/.tanod`
 - CLI wrapper: `~/.local/bin/tanod`
 - Docker services: Tanod gateway + Postgres
-- Container image: exact release image from `ghcr.io/tanod-ai/tanod:<tag>`
+- Container image: exact release image from `brigss007/tanod-ai:<tag>`
 - API key: generated and stored in `~/.tanod/.env` and `~/.tanod/cli.env`
 - Shell execution and private-network HTTP are disabled unless explicitly enabled
 

@@ -154,7 +154,7 @@ if [[ "$START_SERVICES" -eq 1 ]]; then
   fi
 fi
 
-ASSET="tanod_${OS}_${ARCH}.tar.gz"
+ASSET="tanod-ai_${OS}_${ARCH}.tar.gz"
 if [[ -z "$ARTIFACT_URL" ]]; then
   if [[ "$VERSION" == "latest" ]]; then
     ARTIFACT_URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"

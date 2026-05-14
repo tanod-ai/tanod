@@ -4,17 +4,17 @@ Tanod's local Docker installer is intended for developer/test macOS and Linux ma
 
 The installer does **not** require a Tanod source checkout, Node, or Go. It downloads the matching release artifact from GitHub:
 
-- `tanod_linux_amd64.tar.gz`
-- `tanod_linux_arm64.tar.gz`
-- `tanod_darwin_amd64.tar.gz`
-- `tanod_darwin_arm64.tar.gz`
+- `tanod-ai_linux_amd64.tar.gz`
+- `tanod-ai_linux_arm64.tar.gz`
+- `tanod-ai_darwin_amd64.tar.gz`
+- `tanod-ai_darwin_arm64.tar.gz`
 
 Each artifact contains:
 
 - `bin/tanod` — prebuilt CLI
-- `compose/docker-compose.yml` — runtime Compose file using the published GHCR image
+- `compose/docker-compose.yml` — runtime Compose file using the published Docker Hub image
 - `VERSION` — release tag
-- `IMAGE` — exact container image tag
+- `IMAGE` — exact Docker Hub image tag, e.g. `brigss007/tanod-ai:<version>`
 
 Install latest release:
 
@@ -51,7 +51,7 @@ Useful options:
 scripts/install.sh --bind 0.0.0.0 --port 8787
 scripts/install.sh --api-key dev-key --identity ross@example.com
 scripts/install.sh --version v0.1.0-alpha.1
-scripts/install.sh --image ghcr.io/tanod-ai/tanod:v0.1.0-alpha.1
+scripts/install.sh --image brigss007/tanod-ai:v0.1.0-alpha.1
 scripts/install.sh --no-start
 scripts/install.sh --skip-cli
 ```
