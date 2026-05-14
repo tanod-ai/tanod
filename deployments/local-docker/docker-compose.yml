@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${TANOD_POSTGRES_USER:-tanod}
+      POSTGRES_PASSWORD: ${TANOD_POSTGRES_PASSWORD:-tanod}
+      POSTGRES_DB: ${TANOD_POSTGRES_DB:-tanod}
+    ports:
+      - "${TANOD_POSTGRES_BIND_ADDR:-127.0.0.1}:${TANOD_POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - tanod-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  tanod:
+    image: ${TANOD_IMAGE:?set TANOD_IMAGE to a published Tanod container image}
+    environment:
+      TANOD_HOST: 0.0.0.0
+      TANOD_PORT: 8787
+      TANOD_DATABASE_URL: postgres://${TANOD_POSTGRES_USER:-tanod}:${TANOD_POSTGRES_PASSWORD:-tanod}@postgres:5432/${TANOD_POSTGRES_DB:-tanod}
+      TANOD_POLICY_FILE: ${TANOD_POLICY_FILE:-examples/policies/default.json}
+      TANOD_AUDIT_FILE: /data/audit.jsonl
+      TANOD_PRIVATE_KEY_FILE: /data/ed25519-private.pem
+      TANOD_PUBLIC_KEY_FILE: /data/ed25519-public.pem
+      TANOD_API_KEYS: ${TANOD_API_KEYS:?set TANOD_API_KEYS}
+      TANOD_API_KEY_ROLES: ${TANOD_API_KEY_ROLES:-}
+      TANOD_API_KEY_IDENTITIES: ${TANOD_API_KEY_IDENTITIES:-}
+      TANOD_ENABLE_SHELL_EXECUTION: ${TANOD_ENABLE_SHELL_EXECUTION:-false}
+      TANOD_ALLOW_PRIVATE_NETWORK_HTTP: ${TANOD_ALLOW_PRIVATE_NETWORK_HTTP:-false}
+    ports:
+      - "${TANOD_BIND_ADDR:-127.0.0.1}:${TANOD_HOST_PORT:-8787}:8787"
+    volumes:
+      - tanod-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  tanod-postgres:
+  tanod-data:
