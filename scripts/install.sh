@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Install Tanod on macOS or Linux from GitHub release artifacts.
+Install tanod on macOS or Linux from GitHub release artifacts.
 
 Usage:
   scripts/install.sh [options]
@@ -12,10 +12,10 @@ Options:
   --repo <owner/name>       GitHub repository (default: tanod-ai/tanod)
   --version <tag|latest>    Release tag or latest (default: latest)
   --artifact-url <url>      Explicit artifact tarball URL; bypasses repo/version URL construction
-  --home <dir>              Tanod state/config dir (default: ~/.tanod)
+  --home <dir>              tanod state/config dir (default: ~/.tanod)
   --prefix <dir>            CLI wrapper install prefix (default: ~/.local)
-  --bind <addr>             Host bind address for Tanod API (default: 127.0.0.1)
-  --port <port>             Host port for Tanod API (default: 8787)
+  --bind <addr>             Host bind address for tanod API (default: 127.0.0.1)
+  --port <port>             Host port for tanod API (default: 8787)
   --postgres-port <port>    Host port for Postgres (default: 5432)
   --image <image>           Container image override (default: artifact metadata)
   --api-key <key>           API key to configure (default: generated random key)
@@ -132,11 +132,11 @@ if [[ -z "$API_KEY" ]]; then
 fi
 
 if ! have curl; then
-  echo "error: curl is required to download Tanod release artifacts" >&2
+  echo "error: curl is required to download tanod release artifacts" >&2
   exit 1
 fi
 if ! have tar; then
-  echo "error: tar is required to extract Tanod release artifacts" >&2
+  echo "error: tar is required to extract tanod release artifacts" >&2
   exit 1
 fi
 if [[ "$START_SERVICES" -eq 1 ]]; then
@@ -154,7 +154,7 @@ if [[ "$START_SERVICES" -eq 1 ]]; then
   fi
 fi
 
-ASSET="tanod-ai_${OS}_${ARCH}.tar.gz"
+ASSET="tanod_${OS}_${ARCH}.tar.gz"
 if [[ -z "$ARTIFACT_URL" ]]; then
   if [[ "$VERSION" == "latest" ]]; then
     ARTIFACT_URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
@@ -168,7 +168,7 @@ cleanup() { rm -rf "$TMP_DIR"; }
 trap cleanup EXIT
 
 ARCHIVE="$TMP_DIR/$ASSET"
-echo "Downloading Tanod artifact: $ARTIFACT_URL"
+echo "Downloading tanod artifact: $ARTIFACT_URL"
 curl -fL --retry 3 --retry-delay 2 -o "$ARCHIVE" "$ARTIFACT_URL"
 tar -xzf "$ARCHIVE" -C "$TMP_DIR"
 
@@ -247,19 +247,19 @@ chmod 600 "$ENV_FILE"
 chmod 600 "$CLI_ENV_FILE"
 
 if [[ "$START_SERVICES" -eq 1 ]]; then
-  echo "Starting Tanod Docker services with image: $TANOD_IMAGE_EFFECTIVE"
+  echo "Starting tanod Docker services with image: $TANOD_IMAGE_EFFECTIVE"
   docker compose --project-name tanod --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d
   if wait_for_health "http://${BIND_ADDR}:${HOST_PORT}" "$API_KEY"; then
-    echo "Tanod is healthy at http://${BIND_ADDR}:${HOST_PORT}"
+    echo "tanod is healthy at http://${BIND_ADDR}:${HOST_PORT}"
   else
-    echo "warning: Tanod did not become healthy within 60s; inspect with:" >&2
+    echo "warning: tanod did not become healthy within 60s; inspect with:" >&2
     echo "  docker compose --project-name tanod --env-file $(shell_quote "$ENV_FILE") -f $(shell_quote "$COMPOSE_FILE") logs" >&2
   fi
 fi
 
 cat <<SUMMARY
 
-Tanod install complete.
+tanod install complete.
 
 Version:
   $ARTIFACT_VERSION

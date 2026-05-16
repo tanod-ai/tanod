@@ -33,7 +33,7 @@ jobs:
             tag="${GITHUB_REF_NAME}"
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "image=brigss007/tanod-ai" >> "$GITHUB_OUTPUT"
+          echo "image=brigss007/tanod-core" >> "$GITHUB_OUTPUT"
 
   test:
     runs-on: ubuntu-latest
@@ -78,7 +78,7 @@ jobs:
           provenance: mode=max
           labels: |
             org.opencontainers.image.source=https://github.com/tanod-ai/tanod
-            org.opencontainers.image.description=Tanod Agentic AI Security Gateway
+            org.opencontainers.image.description=tanod Agentic AI Security Gateway
             org.opencontainers.image.licenses=Apache-2.0
             org.opencontainers.image.version=${{ needs.vars.outputs.tag }}
           tags: |
@@ -121,11 +121,11 @@ jobs:
           printf '%s\n' '${{ needs.vars.outputs.tag }}' > package/VERSION
           printf '%s:%s\n' '${{ needs.vars.outputs.image }}' '${{ needs.vars.outputs.tag }}' > package/IMAGE
           cp deployments/local-docker/README.md package/README.md
-          tar -C package -czf "dist/tanod-ai_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz" .
+          tar -C package -czf "dist/tanod_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz" .
       - uses: actions/upload-artifact@v4
         with:
-          name: tanod-ai_${{ matrix.goos }}_${{ matrix.goarch }}
-          path: dist/tanod-ai_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
+          name: tanod_${{ matrix.goos }}_${{ matrix.goarch }}
+          path: dist/tanod_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
           if-no-files-found: error
 
   release:
@@ -142,16 +142,16 @@ jobs:
         run: |
           cp scripts/install.sh dist/install.sh
           chmod 755 dist/install.sh
-          (cd dist && sha256sum tanod-ai_*.tar.gz install.sh > checksums.txt)
+          (cd dist && sha256sum tanod_*.tar.gz install.sh > checksums.txt)
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.vars.outputs.tag }}
-          name: Tanod ${{ needs.vars.outputs.tag }}
+          name: tanod ${{ needs.vars.outputs.tag }}
           files: |
-            dist/tanod-ai_linux_amd64.tar.gz
-            dist/tanod-ai_linux_arm64.tar.gz
-            dist/tanod-ai_darwin_amd64.tar.gz
-            dist/tanod-ai_darwin_arm64.tar.gz
+            dist/tanod_linux_amd64.tar.gz
+            dist/tanod_linux_arm64.tar.gz
+            dist/tanod_darwin_amd64.tar.gz
+            dist/tanod_darwin_arm64.tar.gz
             dist/install.sh
             dist/checksums.txt
           generate_release_notes: true

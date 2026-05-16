@@ -108,7 +108,8 @@ export function verifyApprovalToken(
     throw new Error('Approval token policy does not match required policy.');
   }
   const requiredRoles = requirements.required_roles ?? [];
-  if (requiredRoles.length > 0 && (!claims.approved_role || !requiredRoles.includes(claims.approved_role))) {
+  const hasRbacApprovalRole = claims.approved_role === 'Admin' || claims.approved_role === 'Approver';
+  if (requiredRoles.length > 0 && !hasRbacApprovalRole && (!claims.approved_role || !requiredRoles.includes(claims.approved_role))) {
     throw new Error('Approval token approved_role is not authorized for this policy.');
   }
   return claims;

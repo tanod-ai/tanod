@@ -1,5 +1,5 @@
 {
-  "name": "tanod-ai",
+  "name": "tanod-core",
   "version": "0.1.0-alpha.4",
   "description": "Open-source signed execution control for AI agents.",
   "type": "module",
@@ -25,6 +25,7 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "jose": "^6.2.3",
     "pg": "^8.20.0"
   }
 }

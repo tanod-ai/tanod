@@ -229,7 +229,7 @@ export class TanodClient {
     const text = await response.text();
     const parsed = text ? JSON.parse(text) as unknown : {};
     if (!okStatuses.includes(response.status)) {
-      const message = parsed && typeof parsed === 'object' && 'error' in parsed ? String((parsed as { error: unknown }).error) : `Tanod returned HTTP ${response.status}`;
+      const message = parsed && typeof parsed === 'object' && 'error' in parsed ? String((parsed as { error: unknown }).error) : `tanod returned HTTP ${response.status}`;
       throw new Error(message);
     }
     return parsed as T;
@@ -242,14 +242,14 @@ export async function waitForTanodApproval(client: TanodClient, approvalId: stri
   while (Date.now() <= deadline) {
     last = await client.getApprovalRequest(approvalId);
     if (last.status === 'approved') {
-      if (!last.approval_token) return { status: 'rejected', approval: last, reason: 'Tanod approval was approved but did not include an approval token.' };
+      if (!last.approval_token) return { status: 'rejected', approval: last, reason: 'tanod approval was approved but did not include an approval token.' };
       return { status: 'approved', approval: last, approvalToken: last.approval_token };
     }
-    if (last.status === 'rejected') return { status: 'rejected', approval: last, reason: last.rejection_reason ?? 'Tanod approval was rejected.' };
-    if (last.status === 'expired') return { status: 'expired', approval: last, reason: 'Tanod approval expired.' };
+    if (last.status === 'rejected') return { status: 'rejected', approval: last, reason: last.rejection_reason ?? 'tanod approval was rejected.' };
+    if (last.status === 'expired') return { status: 'expired', approval: last, reason: 'tanod approval expired.' };
     await sleep(Math.min(config.approvalPollIntervalMs, Math.max(0, deadline - Date.now())));
   }
-  return { status: 'timeout', approval: last, reason: `Timed out waiting for Tanod approval ${approvalId}.` };
+  return { status: 'timeout', approval: last, reason: `Timed out waiting for tanod approval ${approvalId}.` };
 }
 
 export function formatExecutionContent(execution: TanodExecutionResponse, approval?: TanodApprovalRequestResponse | TanodApprovalWaitResult): string {
@@ -257,9 +257,9 @@ export function formatExecutionContent(execution: TanodExecutionResponse, approv
   if (execution.decision.decision === 'require_approval') {
     const approvalRecord = approvalRecordFrom(approval);
     const approvalLine = approvalRecord?.approval_id ? ` Approval request: ${approvalRecord.approval_id}.` : '';
-    return `Tanod blocked execution until approval is granted.${approvalLine} ${execution.result.error ?? execution.decision.message}`.trim();
+    return `tanod blocked execution until approval is granted.${approvalLine} ${execution.result.error ?? execution.decision.message}`.trim();
   }
-  return `Tanod ${execution.decision.decision}: ${execution.result.error ?? execution.decision.message}`;
+  return `tanod ${execution.decision.decision}: ${execution.result.error ?? execution.decision.message}`;
 }
 
 function approvalRecordFrom(approval: TanodApprovalRequestResponse | TanodApprovalWaitResult | undefined): TanodApprovalRequestResponse | undefined {

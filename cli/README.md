@@ -1,6 +1,8 @@
-# Tanod CLI
+# tanod CLI
 
-Native Go command-line client for Tanod.
+Native Go command-line client for tanod.
+
+The CLI talks to the non-interactive `tanod-core` `/v1/*` API surface. It cannot use browser OAuth/OIDC; configure `TANOD_API_KEY` when `tanod-core` is exposed beyond loopback.
 
 ## Build
 
@@ -13,7 +15,7 @@ go build -o ../bin/tanod ./cmd/tanod
 
 ```bash
 export TANOD_URL=http://127.0.0.1:8787
-export TANOD_API_KEY=dev-key # only if gateway uses TANOD_API_KEYS
+export TANOD_API_KEY=dev-key # required for non-loopback tanod-core APIs
 
 ./bin/tanod help
 ./bin/tanod decide ../examples/requests/shell-write-prod.json

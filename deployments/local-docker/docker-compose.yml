@@ -15,8 +15,8 @@ services:
       timeout: 3s
       retries: 20
 
-  tanod:
-    image: ${TANOD_IMAGE:?set TANOD_IMAGE to a published Tanod container image}
+  tanod-core:
+    image: ${TANOD_IMAGE:?set TANOD_IMAGE to a published tanod-core container image}
     environment:
       TANOD_HOST: 0.0.0.0
       TANOD_PORT: 8787
@@ -33,7 +33,7 @@ services:
     ports:
       - "${TANOD_BIND_ADDR:-127.0.0.1}:${TANOD_HOST_PORT:-8787}:8787"
     volumes:
-      - tanod-data:/data
+      - tanod-core-data:/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,4 +41,4 @@ services:
 
 volumes:
   tanod-postgres:
-  tanod-data:
+  tanod-core-data:

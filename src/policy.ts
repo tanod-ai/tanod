@@ -61,7 +61,7 @@ export function inferRisk(request: ToolCallRequest): RiskLevel {
   return 'L0';
 }
 
-function validatePolicyFile(policyFile: PolicyFile): void {
+export function validatePolicyFile(policyFile: PolicyFile): void {
   if (policyFile.version !== 'v1') throw new Error('Policy file version must be v1.');
   if (!Array.isArray(policyFile.policies)) throw new Error('Policy file must contain a policies array.');
   for (const policy of policyFile.policies) {

@@ -69,6 +69,23 @@ test('audit log continues from durable storage when JSONL file is missing', asyn
   assert.equal(event.previous_hash, storedHead);
 });
 
+test('audit log lists durable storage events when JSONL file is missing', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'tanod-audit-storage-list-'));
+  const path = join(dir, 'audit.jsonl');
+  const storage = new MemoryStorage();
+  await storage.recordAuditEvent({
+    event_id: 'evt_existing',
+    event_type: 'approval.requested',
+    timestamp: new Date().toISOString(),
+    request_id: 'req_existing',
+    event_hash: 'sha256:stored-head',
+  });
+  const audit = new AuditLog(path, storage);
+  const events = await audit.listEvents({ request_id: 'req_existing' });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].event_id, 'evt_existing');
+});
+
 test('audit log refuses mismatched JSONL and durable storage heads', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'tanod-audit-mismatch-'));
   const path = join(dir, 'audit.jsonl');

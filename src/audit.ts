@@ -1,4 +1,4 @@
-import { mkdir, readFile, appendFile } from 'node:fs/promises';
+import { mkdir, readFile, appendFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { canonicalize, sha256Hex } from './canonical.js';
@@ -33,8 +33,14 @@ export class AuditLog {
     const eventHash = `sha256:${sha256Hex(canonicalize(unsigned))}`;
     const signed: AuditEvent = { ...unsigned, event_hash: eventHash };
     await mkdir(dirname(this.filePath), { recursive: true });
-    await appendFile(this.filePath, `${JSON.stringify(signed)}\n`, 'utf8');
-    await this.storage?.recordAuditEvent(signed);
+    const line = `${JSON.stringify(signed)}\n`;
+    await appendFile(this.filePath, line, 'utf8');
+    try {
+      await this.storage?.recordAuditEvent(signed);
+    } catch (error) {
+      await rollbackJsonlAppend(this.filePath, line);
+      throw error;
+    }
     this.previousHash = eventHash;
     return signed;
   }
@@ -43,6 +49,25 @@ export class AuditLog {
     if (this.initialized) return;
     this.initializePromise ??= this.initializeNow();
     await this.initializePromise;
+  }
+
+  async listEvents(options: { event_type?: string; request_id?: string; limit?: number } = {}): Promise<AuditEvent[]> {
+    await this.initialize();
+    let raw = '';
+    try {
+      raw = await readFile(this.filePath, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return (await this.storage?.listAuditEvents(options)) ?? [];
+      throw error;
+    }
+    const events = raw
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as AuditEvent)
+      .filter((event) => !options.event_type || event.event_type === options.event_type)
+      .filter((event) => !options.request_id || event.request_id === options.request_id)
+      .reverse();
+    return events.slice(0, normalizeLimit(options.limit));
   }
 
   private async initializeNow(): Promise<void> {
@@ -70,6 +95,18 @@ export class AuditLog {
     this.previousHash = fileHash ?? storageHash;
     this.initialized = true;
   }
+}
+
+async function rollbackJsonlAppend(filePath: string, line: string): Promise<void> {
+  const raw = await readFile(filePath, 'utf8');
+  if (!raw.endsWith(line)) return;
+  await writeFile(filePath, raw.slice(0, -line.length), 'utf8');
+}
+
+function normalizeLimit(limit: number | undefined): number {
+  if (limit === undefined) return 100;
+  if (!Number.isInteger(limit) || limit < 1) return 100;
+  return Math.min(limit, 500);
 }
 
 export function verifyAuditChain(events: AuditEvent[]): boolean {

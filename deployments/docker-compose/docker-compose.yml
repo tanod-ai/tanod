@@ -15,7 +15,8 @@ services:
       timeout: 3s
       retries: 20
 
-  tanod:
+  tanod-core:
+    image: tanod-core:local
     build:
       context: ../..
     environment:
@@ -32,11 +33,11 @@ services:
     ports:
       - "8787:8787"
     volumes:
-      - tanod-data:/data
+      - tanod-core-data:/data
     depends_on:
       postgres:
         condition: service_healthy
 
 volumes:
   tanod-postgres:
-  tanod-data:
+  tanod-core-data:

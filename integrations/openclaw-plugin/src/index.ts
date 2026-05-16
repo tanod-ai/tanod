@@ -14,12 +14,12 @@ import {
   type TanodToolCallRequest,
 } from './tanod.js';
 
-const TOOL_RESULT_PREFIX = '[Tanod]';
+const TOOL_RESULT_PREFIX = '[tanod]';
 
 export default definePluginEntry({
   id: 'tanod',
-  name: 'Tanod',
-  description: 'Injects Tanod signed execution control into OpenClaw tool calls.',
+  name: 'tanod',
+  description: 'Injects tanod signed execution control into OpenClaw tool calls.',
   register(api: any) {
     const pluginConfig = api.pluginConfig;
     api.on(
@@ -31,11 +31,11 @@ export default definePluginEntry({
     api.registerTool(
       {
         name: 'tanod_exec',
-        description: 'Execute a shell command through Tanod policy, approval, signed execution, and audit.',
+        description: 'Execute a shell command through tanod policy, approval, signed execution, and audit.',
         parameters: objectSchema({
           argv: { type: 'array', items: { type: 'string' }, description: 'Preferred executable argv, e.g. ["ls", "-la"].' },
           command: { type: 'string', description: 'Legacy simple command string. argv is preferred.' },
-          approvalToken: { type: 'string', description: 'Optional Tanod approval token for retrying an approved action.' },
+          approvalToken: { type: 'string', description: 'Optional tanod approval token for retrying an approved action.' },
           targetSystem: { type: 'string' },
           targetEnvironment: { type: 'string' },
           targetResource: { type: 'string' },
@@ -51,7 +51,7 @@ export default definePluginEntry({
     api.registerTool(
       {
         name: 'tanod_http_request',
-        description: 'Make an HTTP request through Tanod policy, approval, signed execution, SSRF checks, and audit.',
+        description: 'Make an HTTP request through tanod policy, approval, signed execution, SSRF checks, and audit.',
         parameters: objectSchema({
           url: { type: 'string' },
           method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'] },
@@ -73,7 +73,7 @@ export default definePluginEntry({
     api.registerTool(
       {
         name: 'tanod_mcp_call_tool',
-        description: 'Call an MCP tool through Tanod policy, approval, signed execution, and audit.',
+        description: 'Call an MCP tool through tanod policy, approval, signed execution, and audit.',
         parameters: objectSchema({
           server_url: { type: 'string' },
           tool_name: { type: 'string' },
@@ -103,7 +103,7 @@ async function beforeToolCall(event: OpenClawToolEvent, pluginConfig?: unknown):
     if (protectedTool && config.blockRawProtectedToolsInGovernedMode) {
       return {
         block: true,
-        blockReason: `Blocked by Tanod: raw OpenClaw tool '${event.toolName}' is protected. Use tanod_exec, tanod_http_request, or tanod_mcp_call_tool instead.`,
+        blockReason: `Blocked by tanod: raw OpenClaw tool '${event.toolName}' is protected. Use tanod_exec, tanod_http_request, or tanod_mcp_call_tool instead.`,
       };
     }
     return undefined;
@@ -117,21 +117,21 @@ async function beforeToolCall(event: OpenClawToolEvent, pluginConfig?: unknown):
     const decision = await client.decide(request);
     if (decision.decision === 'allow') return undefined;
     if (decision.decision === 'deny') {
-      return { block: true, blockReason: decision.message || 'Blocked by Tanod policy.' };
+      return { block: true, blockReason: decision.message || 'Blocked by tanod policy.' };
     }
 
     if (!config.createApprovalRequests) {
-      return { block: true, blockReason: `${decision.message} Tanod approval is required, but approval request creation is disabled.` };
+      return { block: true, blockReason: `${decision.message} tanod approval is required, but approval request creation is disabled.` };
     }
     const approval = await client.createApprovalRequest(request);
-    if (!approval?.approval_id) return { block: true, blockReason: 'Tanod approval is required, but no approval request was created.' };
+    if (!approval?.approval_id) return { block: true, blockReason: 'tanod approval is required, but no approval request was created.' };
     const waited = await waitForTanodApproval(client, approval.approval_id, config);
     if (waited.status !== 'approved') return { block: true, blockReason: waited.reason };
     await client.verifyApproval(request, waited.approvalToken);
     return undefined;
   } catch (error) {
     if (config.failClosed) {
-      return { block: true, blockReason: `Tanod unavailable or rejected request: ${error instanceof Error ? error.message : 'unknown error'}` };
+      return { block: true, blockReason: `tanod unavailable or rejected request: ${error instanceof Error ? error.message : 'unknown error'}` };
     }
     return undefined;
   }

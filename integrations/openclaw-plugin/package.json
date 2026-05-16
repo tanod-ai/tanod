@@ -1,18 +1,22 @@
 {
-  "name": "@tanod/openclaw-plugin",
+  "name": "tanod-openclaw",
   "version": "0.1.0-alpha.0",
-  "description": "OpenClaw plugin for Tanod signed execution control.",
+  "description": "OpenClaw plugin for tanod signed execution control.",
   "type": "module",
   "private": false,
   "license": "Apache-2.0",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
   "files": [
-    "dist",
+    "dist/src",
     "src",
     "openclaw.plugin.json",
     "README.md"
   ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test dist/tests/*.test.js",
@@ -29,7 +33,7 @@
     "typescript": "^5.8.3"
   },
   "openclaw": {
-    "extensions": ["./src/index.ts"],
+    "extensions": ["./dist/src/index.js"],
     "compat": {
       "pluginApi": ">=2026.5.7",
       "minGatewayVersion": "2026.5.7"

@@ -1,7 +1,7 @@
 {
   "id": "tanod",
-  "name": "Tanod",
-  "description": "Injects Tanod signed execution control into OpenClaw tool calls.",
+  "name": "tanod",
+  "description": "Injects tanod signed execution control into OpenClaw tool calls.",
   "contracts": {
     "tools": ["tanod_exec", "tanod_http_request", "tanod_mcp_call_tool"]
   },
@@ -21,21 +21,21 @@
         "type": "string",
         "enum": ["gate_only", "governed_replacement"],
         "default": "gate_only",
-        "description": "gate_only intercepts existing OpenClaw tools before execution. governed_replacement registers Tanod-backed tools and can block configured raw tools."
+        "description": "gate_only intercepts existing OpenClaw tools before execution. governed_replacement registers tanod-backed tools and can block configured raw tools."
       },
       "tanodUrl": {
         "type": "string",
         "default": "http://127.0.0.1:8787",
-        "description": "Base URL for the Tanod gateway."
+        "description": "Base URL for the tanod gateway."
       },
       "apiKey": {
         "type": "string",
-        "description": "Tanod API key. Prefer apiKeyEnv for production."
+        "description": "tanod API key. Prefer apiKeyEnv for production."
       },
       "apiKeyEnv": {
         "type": "string",
         "default": "TANOD_API_KEY",
-        "description": "Environment variable containing the Tanod API key."
+        "description": "Environment variable containing the tanod API key."
       },
       "agentId": {
         "type": "string",
@@ -75,14 +75,14 @@
         "minimum": 1000,
         "maximum": 600000,
         "default": 600000,
-        "description": "Maximum time to wait for Tanod approval polling before denying."
+        "description": "Maximum time to wait for tanod approval polling before denying."
       },
       "approvalPollIntervalMs": {
         "type": "integer",
         "minimum": 100,
         "maximum": 60000,
         "default": 2000,
-        "description": "Polling interval while waiting for a Tanod approval request to be approved or rejected."
+        "description": "Polling interval while waiting for a tanod approval request to be approved or rejected."
       },
       "approvalTimeoutBehavior": {
         "type": "string",
@@ -91,12 +91,12 @@
       },
       "approvalRole": {
         "type": "string",
-        "description": "Optional Tanod approval role used only by future custom approval flows."
+        "description": "Optional tanod approval role used only by future custom approval flows."
       },
       "failClosed": {
         "type": "boolean",
         "default": true,
-        "description": "When Tanod is unavailable, block protected tools instead of allowing them."
+        "description": "When tanod is unavailable, block protected tools instead of allowing them."
       }
     }
   }

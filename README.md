@@ -1,20 +1,24 @@
-# Tanod
+# tanod
+
+<p align="center">
+  <img src="assets/tanod-logo.png" alt="tanod logo" width="180" />
+</p>
 
 **Open-source signed execution control for AI agents.**
 
-Tanod is a security control plane that sits between AI agents and the tools they use. It intercepts tool calls before execution, evaluates them against deterministic policy, requires human approval for high-risk actions, cryptographically binds approvals to the exact requested action, and records decisions in an auditable trail.
+tanod is a security control plane that sits between AI agents and the tools they use. It intercepts tool calls before execution, evaluates them against deterministic policy, requires human approval for high-risk actions, cryptographically binds approvals to the exact requested action, and records decisions in an auditable trail.
 
 AI agents should not be able to grant admin access, delete data, deploy to production, send sensitive information, or run destructive commands just because a model decided to call a tool.
 
-Tanod separates **reasoning** from **execution**.
+tanod separates **reasoning** from **execution**.
 
 ```text
-AI Agent → Tanod Gateway → Policy → Approval → Signed Execution → Audit → Tool
+AI Agent → tanod Gateway → Policy → Approval → Signed Execution → Audit → Tool
 ```
 
 ## Project status
 
-Tanod is in early v0.1 development. The current repository contains the first executable gateway skeleton:
+tanod is in early v0.1 development. The current repository contains the first executable gateway skeleton:
 
 - HTTP API for evaluating and executing governed agent tool-call requests
 - Deterministic policy engine with allow / deny / require-approval decisions
@@ -34,13 +38,13 @@ Tanod is in early v0.1 development. The current repository contains the first ex
 
 The implementation is currently TypeScript/Node.js because this build environment has Node available but not Go. The architecture is intentionally modular so core services can later be split, rewritten, or complemented by Go/Rust components where appropriate.
 
-## Why Tanod exists
+## Why tanod exists
 
 Traditional automation mostly failed by following the wrong process or receiving bad inputs. AI agents introduce a different risk: they can confidently misunderstand intent and then take real action.
 
 Prompt guardrails are not enough. The dangerous boundary is not just what the model says; it is what the agent tries to **do**.
 
-Tanod focuses on the execution boundary:
+tanod focuses on the execution boundary:
 
 - Which agent is acting?
 - Which human or system is accountable?
@@ -54,7 +58,7 @@ Tanod focuses on the execution boundary:
 ## Core principles
 
 1. **Agents are not trusted by default**  
-   Agents can propose actions; Tanod decides whether those actions can execute.
+   Agents can propose actions; tanod decides whether those actions can execute.
 
 2. **Tool calls are security events**  
    Every meaningful tool call should be inspectable, governable, and auditable.
@@ -66,14 +70,26 @@ Tanod focuses on the execution boundary:
    A human approval must not be reusable for different arguments, users, tools, systems, or environments.
 
 5. **Audit must be trustworthy**  
-   Tanod records a hash-chained event stream so later tampering is detectable.
+   tanod records a hash-chained event stream so later tampering is detectable.
 
 ## High-level architecture
+
+tanod now separates the browser-facing server from the machine API contract:
+
+- `tanod-core` serves `tanod-console`, handles OAuth/OIDC browser login, user administration, and human approval workflows.
+- `tanod-core` is the machine-facing `/v1/*` API surface used by `tanod-cli` and `tanod-openclaw`. It is non-interactive and must be protected with `TANOD_API_KEYS` whenever it is exposed beyond loopback.
+
+In the current implementation these surfaces run in one Node process, but their source routing is split:
+
+- `src/server-api.ts` owns browser-facing console configuration and OAuth2 callback routes.
+- `src/server-api.ts` also owns the console's authenticated data route boundary for OAuth/OIDC sessions, including users, policies, audit events, agents, and approval requests.
+- `src/core-api.ts` owns the machine API route boundary for API-key clients such as CLI/OpenClaw/core calls.
+- `src/server.ts` wires shared storage, policy, signing keys, and both route surfaces into the single runtime.
 
 ```mermaid
 flowchart LR
     User[User / Human] --> Agent[AI Agent / App / Copilot]
-    Agent --> Gateway[Tanod Gateway]
+    Agent --> Gateway[tanod Gateway]
 
     Gateway --> Classifier[Risk Classifier]
     Gateway --> Policy[Policy Engine]
@@ -93,7 +109,7 @@ flowchart LR
     Approval --> Audit
     Policy --> Audit
 
-    Audit --> Console[Tanod Console / CLI]
+    Audit --> Console[tanod Console / CLI]
 ```
 
 ## Runtime flow
@@ -102,9 +118,9 @@ flowchart LR
 
 ```text
 1. Agent requests a read-only diagnostic tool call.
-2. Tanod canonicalizes and hashes the arguments.
+2. tanod canonicalizes and hashes the arguments.
 3. Policy engine returns allow.
-4. Tanod records the decision in the audit log.
+4. tanod records the decision in the audit log.
 5. The tool proxy may execute the request.
 ```
 
@@ -112,12 +128,12 @@ flowchart LR
 
 ```text
 1. Agent requests a production write action.
-2. Tanod classifies the action as high/critical risk.
+2. tanod classifies the action as high/critical risk.
 3. Policy returns require_approval.
 4. Human approver reviews the exact action.
-5. Tanod signs an approval token containing the tool argument hash.
+5. tanod signs an approval token containing the tool argument hash.
 6. Tool proxy verifies the token and argument hash before execution.
-7. Tanod records request, approval, execution, and result events.
+7. tanod records request, approval, execution, and result events.
 ```
 
 ### Tampering attempt
@@ -127,7 +143,7 @@ flowchart LR
 2. Agent changes arguments to jane@example.com.
 3. Tool proxy recomputes the argument hash.
 4. Hash does not match the signed approval token.
-5. Tanod blocks execution and records a critical audit event.
+5. tanod blocks execution and records a critical audit event.
 ```
 
 ## Current API
@@ -189,7 +205,7 @@ Response:
 
 ### `POST /v1/executions`
 
-Evaluates and attempts to execute a tool call through Tanod's guarded execution pipeline.
+Evaluates and attempts to execute a tool call through tanod's guarded execution pipeline.
 
 Behavior:
 
@@ -337,11 +353,11 @@ Supported match operators:
 - `matches`
 - `in`
 
-Policy evaluation is first-match by explicit priority, then file order. If no policy matches, Tanod defaults to `deny`.
+Policy evaluation is first-match by explicit priority, then file order. If no policy matches, tanod defaults to `deny`.
 
 ## Execution adapters
 
-Tanod now includes a small adapter registry used by `/v1/executions`.
+tanod now includes a small adapter registry used by `/v1/executions`.
 
 ### `shell.exec`
 
@@ -353,9 +369,9 @@ Arguments:
 }
 ```
 
-For compatibility, `command` strings are accepted only as simple executable-plus-arguments strings. Tanod does **not** execute them through a shell; shell metacharacters such as `;`, `&&`, pipes, redirection, command substitution, and newlines are rejected. Prefer `argv` for exact execution semantics.
+For compatibility, `command` strings are accepted only as simple executable-plus-arguments strings. tanod does **not** execute them through a shell; shell metacharacters such as `;`, `&&`, pipes, redirection, command substitution, and newlines are rejected. Prefer `argv` for exact execution semantics.
 
-Shell execution is **disabled by default**. This is deliberate: Tanod should be safe to run locally and in CI without accidentally becoming a remote command execution service.
+Shell execution is **disabled by default**. This is deliberate: tanod should be safe to run locally and in CI without accidentally becoming a remote command execution service.
 
 Enable it only in a trusted environment:
 
@@ -381,7 +397,7 @@ The HTTP adapter supports `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`. R
 
 ### `mcp.call_tool`
 
-Calls a tool exposed by an MCP server through Tanod's guarded execution path. The current adapter supports HTTP/streamable JSON-RPC style MCP endpoints and sends the MCP `tools/call` method. Stdio MCP support is planned separately because it requires process/session lifecycle management.
+Calls a tool exposed by an MCP server through tanod's guarded execution path. The current adapter supports HTTP/streamable JSON-RPC style MCP endpoints and sends the MCP `tools/call` method. Stdio MCP support is planned separately because it requires process/session lifecycle management.
 
 Arguments:
 
@@ -396,7 +412,7 @@ Arguments:
 }
 ```
 
-Tanod sends:
+tanod sends:
 
 ```json
 {
@@ -412,7 +428,7 @@ Tanod sends:
 }
 ```
 
-Policy still decides whether the MCP tool call is allowed, denied, or requires signed approval before Tanod contacts the MCP server.
+Policy still decides whether the MCP tool call is allowed, denied, or requires signed approval before tanod contacts the MCP server.
 
 ## Web console
 
@@ -446,12 +462,12 @@ A plain `tanod decide` call does not create a persistent approval request. To ma
 
 ## OpenClaw plugin
 
-The OpenClaw plugin lives in `integrations/openclaw-plugin` and injects Tanod at OpenClaw's tool boundary, after the LLM has produced a structured tool call and before OpenClaw executes it.
+The OpenClaw plugin lives in `integrations/openclaw-plugin` and injects tanod at OpenClaw's tool boundary, after the LLM has produced a structured tool call and before OpenClaw executes it.
 
 It supports two configurable modes:
 
-1. `gate_only` — a high-priority `before_tool_call` hook evaluates existing OpenClaw tools with Tanod. Denied calls are blocked. Approval-required calls create a Tanod approval request, poll Tanod for completion, verify the signed token, then allow the original OpenClaw tool to run. OpenClaw `/approve` is not used as an authorization source.
-2. `governed_replacement` — the plugin registers Tanod-backed tools (`tanod_exec`, `tanod_http_request`, `tanod_mcp_call_tool`) and, by default, blocks configured raw dangerous OpenClaw tools so agents must use Tanod's `/v1/executions` path. Approval-required calls wait for a Tanod-signed approval token and retry through Tanod.
+1. `gate_only` — a high-priority `before_tool_call` hook evaluates existing OpenClaw tools with tanod. Denied calls are blocked. Approval-required calls create a tanod approval request, poll tanod for completion, verify the signed token, then allow the original OpenClaw tool to run. OpenClaw `/approve` is not used as an authorization source.
+2. `governed_replacement` — the plugin registers tanod-backed tools (`tanod_exec`, `tanod_http_request`, `tanod_mcp_call_tool`) and, by default, blocks configured raw dangerous OpenClaw tools so agents must use tanod's `/v1/executions` path. Approval-required calls wait for a tanod-signed approval token and retry through tanod.
 
 Example gate-only config:
 
@@ -500,17 +516,17 @@ Example governed replacement config:
 }
 ```
 
-Gate-only mode is best for rollout and observation. Governed replacement mode is stronger because Tanod owns policy, approval verification, execution, and audit. In both modes, OpenClaw `/approve` does not substitute for a Tanod approval. See `integrations/openclaw-plugin/README.md` for full config details.
+Gate-only mode is best for rollout and observation. Governed replacement mode is stronger because tanod owns policy, approval verification, execution, and audit. In both modes, OpenClaw `/approve` does not substitute for a tanod approval. See `integrations/openclaw-plugin/README.md` for full config details.
 
 ## Storage
 
-Tanod supports Postgres-backed durable storage. Set `TANOD_DATABASE_URL` to enable it:
+tanod supports Postgres-backed durable storage. Set `TANOD_DATABASE_URL` to enable it:
 
 ```bash
 TANOD_DATABASE_URL=postgres://tanod:tanod@localhost:5432/tanod npm start
 ```
 
-On startup, Tanod creates the required tables if they do not exist. The schema is also documented in `db/schema.sql`.
+On startup, tanod creates the required tables if they do not exist. The schema is also documented in `db/schema.sql`.
 
 Durable tables:
 
@@ -518,11 +534,11 @@ Durable tables:
 - `tanod_approval_requests`
 - `tanod_audit_events`
 
-If `TANOD_DATABASE_URL` is absent, Tanod uses in-memory storage for local development and tests. Postgres should be used for any real deployment.
+If `TANOD_DATABASE_URL` is absent, tanod uses in-memory storage for local development and tests. Postgres should be used for any real deployment.
 
 ## API authentication
 
-Set comma-separated API keys to require authentication for all non-health endpoints. This is strongly recommended whenever Tanod binds to a LAN-accessible address:
+Set comma-separated API keys to require authentication for all non-health endpoints. This is strongly recommended whenever tanod binds to a LAN-accessible address:
 
 ```bash
 TANOD_API_KEYS=key-one,key-two \
@@ -543,6 +559,57 @@ or:
 x-tanod-api-key: key-one
 ```
 
+The `tanod-core` browser frontend can authenticate with OIDC ID tokens. Configure trusted providers with semicolon-separated `id|issuer|audience[|jwks_uri]` entries:
+
+```bash
+TANOD_OIDC_PROVIDERS='google|https://accounts.google.com|<google-client-id>;microsoft|https://login.microsoftonline.com/<tenant-id>/v2.0|<microsoft-client-id>' \
+TANOD_OIDC_IDENTITY_ROLES='https://accounts.google.com#<provider-sub>:platform_owner,security_owner' \
+npm start
+```
+
+OIDC identities use stable issuer and subject values in the form `<issuer>#<sub>`. Email-like claims are display metadata only and are not used for account binding. Approval-required policies fail closed unless the authenticated identity maps to an active tanod user and `TANOD_OIDC_IDENTITY_ROLES` grants one of the policy's required roles.
+
+After OAuth2 or OIDC authentication succeeds, tanod only creates a console session if the resolved identity has an active user row. Admins can manage those rows in the console or with:
+
+```bash
+tanod user ls
+tanod user add <user-id> <display-name> <role> [role2] [role3]
+tanod user <user-id> add-role <role-name>
+tanod user <user-id> remove-roles <role-name>
+tanod user delete <user-id>
+```
+
+Use the exact identity emitted by the provider as `<user-id>`. For GitHub OAuth2 this is the `oauth_identity` value returned by tanod after unauthorized callback handling. For OIDC this is `<issuer>#<sub>`.
+
+For the Vite console, configure provider client IDs with:
+
+```bash
+VITE_TANOD_GOOGLE_CLIENT_ID=<google-client-id>
+VITE_TANOD_MICROSOFT_CLIENT_ID=<microsoft-client-id>
+VITE_TANOD_MICROSOFT_TENANT_ID=<tenant-id-or-common>
+VITE_TANOD_GITHUB_ISSUER=<github-compatible-oidc-issuer>
+VITE_TANOD_GITHUB_CLIENT_ID=<github-client-id>
+```
+
+GitHub can also be configured as a server-side OAuth2 provider so the browser never needs a GitHub client secret:
+
+```bash
+tanod config oauth add github --client-id <github-client-id> --client-secret <github-client-secret>
+TANOD_OAUTH_CALLBACK_BASE_URL=http://192.168.68.131:8787 npm start
+```
+
+Register exactly one callback URL in the GitHub OAuth app:
+
+```text
+http://192.168.68.131:8787/v1/oauth2/github/callback
+```
+
+`TANOD_OAUTH_CALLBACK_BASE_URL` should be the externally reachable `tanod-core` origin. If it is omitted, tanod uses the configured `base_url` from `tanod config set base-url <url>`, then `TANOD_CONSOLE_API_BASE_URL`, then the incoming request host. The console URL is carried in signed OAuth state, so the GitHub app does not need multiple callback URLs for different console origins.
+
+Set `TANOD_CONSOLE_BASE_URL` to the externally reachable console origin when the console is hosted separately from `tanod-core`. OAuth2 redirects and credentialed CORS responses are only allowed for that origin when configured. Successful OAuth2 sessions are delivered as an HttpOnly `tanod_session` cookie, not as URL query-string tokens. Same-host console/API deployments use `SameSite=Lax`; cross-site console/API deployments require HTTPS and use `SameSite=None; Secure`.
+
+Public GitHub OAuth apps do not issue standard OIDC ID tokens directly to browser clients. Use server-side OAuth2 for GitHub, or set `VITE_TANOD_GITHUB_ISSUER` only when you have a GitHub-compatible OIDC broker.
+
 ## Repository layout
 
 ```text
@@ -555,15 +622,18 @@ x-tanod-api-key: key-one
 │   ├── execution.ts      # guarded decide/approve/execute pipeline
 │   ├── index.ts          # process entrypoint
 │   ├── policy.ts         # deterministic policy matcher/evaluator
-│   ├── server.ts         # HTTP API
+│   ├── oidc.ts           # OIDC JWT verification
+│   ├── core-api.ts       # tanod-core route boundary for API-key machine calls
+│   ├── server-api.ts     # tanod-core console/OAuth route handlers and console data route boundary
+│   ├── server.ts         # runtime wiring for shared storage, policy, signing, and routes
 │   └── signing.ts        # Ed25519 approval token signing/verification
 ├── tests/                # node:test coverage
 ├── examples/
 │   ├── policies/         # starter policies
 │   └── requests/         # sample agent tool calls
-├── apps/console/       # standalone React/Vite web console
-├── cli/                # native Go CLI
-├── integrations/openclaw-plugin/ # OpenClaw Tanod plugin
+├── apps/console/       # tanod-console React/Vite web console
+├── cli/                # tanod-cli native Go CLI; binary remains tanod
+├── integrations/openclaw-plugin/ # tanod-openclaw plugin package
 ├── db/schema.sql
 ├── deployments/docker-compose/docker-compose.yml
 ├── Dockerfile
@@ -574,7 +644,7 @@ x-tanod-api-key: key-one
 
 ## Local Docker install for macOS and Linux
 
-Tanod publishes deployable release artifacts through GitHub Actions. The installer does not require a source checkout, Node, or Go: it downloads the matching prebuilt CLI + Compose bundle from GitHub Releases and runs the gateway from the published Docker Hub image.
+tanod publishes deployable release artifacts through GitHub Actions. The installer does not require a source checkout, Node, or Go: it downloads the matching prebuilt CLI + Compose bundle from GitHub Releases and runs the gateway from the published Docker Hub image.
 
 Install latest release:
 
@@ -597,10 +667,10 @@ scripts/install.sh
 
 Release assets:
 
-- `tanod-ai_linux_amd64.tar.gz`
-- `tanod-ai_linux_arm64.tar.gz`
-- `tanod-ai_darwin_amd64.tar.gz`
-- `tanod-ai_darwin_arm64.tar.gz`
+- `tanod_linux_amd64.tar.gz`
+- `tanod_linux_arm64.tar.gz`
+- `tanod_darwin_amd64.tar.gz`
+- `tanod_darwin_arm64.tar.gz`
 - `install.sh`
 - `checksums.txt`
 
@@ -609,8 +679,8 @@ Defaults:
 - API: `http://127.0.0.1:8787`
 - State/config: `~/.tanod`
 - CLI wrapper: `~/.local/bin/tanod`
-- Docker services: Tanod gateway + Postgres
-- Container image: exact release image from `brigss007/tanod-ai:<tag>`
+- Docker services: tanod gateway + Postgres
+- Container image: exact release image from `brigss007/tanod-core:<tag>`
 - API key: generated and stored in `~/.tanod/.env` and `~/.tanod/cli.env`
 - Shell execution and private-network HTTP are disabled unless explicitly enabled
 
@@ -660,7 +730,7 @@ Defaults:
 - Host: `127.0.0.1` (loopback only; set `TANOD_HOST=0.0.0.0` for LAN/server use)
 - Port: `8787`
 - Policy file: `examples/policies/default.json`
-- Audit file: `.tanod/audit.jsonl`; when durable storage is configured, Tanod verifies the JSONL head against the durable audit head before appending
+- Audit file: `.tanod/audit.jsonl`; when durable storage is configured, tanod verifies the JSONL head against the durable audit head before appending
 - Postgres URL: optional `TANOD_DATABASE_URL`
 - API keys: required for non-loopback binds unless `TANOD_ALLOW_UNAUTHENTICATED=true` is explicitly set
 - API key roles: optional `TANOD_API_KEY_ROLES` as `key:role,role;other-key:role`
@@ -713,7 +783,7 @@ mkdir -p bin
 (cd cli && go build -o ../bin/tanod ./cmd/tanod)
 ```
 
-Start Tanod in one terminal. For unauthenticated local-only testing, root `npm run dev` binds to loopback by default:
+Start tanod in one terminal. For unauthenticated local-only testing, root `npm run dev` binds to loopback by default:
 
 ```bash
 npm run dev
@@ -801,7 +871,7 @@ The first release should prove the core idea end-to-end:
 
 ## Positioning
 
-Avoid thinking of Tanod as just another LLM firewall. Tanod is narrower and sharper:
+Avoid thinking of tanod as just another LLM firewall. tanod is narrower and sharper:
 
 > **No high-risk tool call executes unless policy allows it or a human signs the exact action.**
 
